@@ -1,0 +1,50 @@
+name: Linting CI
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'api/**'
+      - 'etl/**'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'api/**'
+      - 'etl/**'
+
+jobs:
+  cpp-lint:
+    name: C++ Lint (Engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Clang-Format
+        uses: docker://ghcr.io/cpp-linter/cpp-linter-action:v2
+        with:
+          style: 'file'
+          tidy-checks: ''
+          path: 'engine'
+
+  go-lint:
+    name: Go Lint (API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Gofmt
+        uses: docker://golang:1.21-bookworm
+        with:
+          args: gofmt -l -w api/
+
+  python-lint:
+    name: Python Lint (ETL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Black
+        uses: docker://pyfound/black:latest_release
+        with:
+          args: black --check etl/
+      - name: Run isort
+        uses: docker://python:3.11-slim
+        with:
+          args: sh -c "pip install isort && isort --check-only etl/"
