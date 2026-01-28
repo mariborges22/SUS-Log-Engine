@@ -296,8 +296,9 @@ resource "aws_db_parameter_group" "postgres" {
 
   # Parâmetros otimizados para alta performance com Hash Tables e B-Trees
   parameter {
-    name  = "shared_buffers"
-    value = "{DBInstanceClassMemory/4096}"
+    name         = "shared_buffers"
+    value        = "{DBInstanceClassMemory/4096}"
+    apply_method = "pending-reboot"
   }
 
   parameter {
