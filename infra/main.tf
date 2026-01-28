@@ -344,8 +344,8 @@ resource "aws_db_instance" "postgres" {
 
   # Database Configuration
   db_name  = var.db_name
-  username = var.db_username
-  password = var.admin_password_password
+  username = var.admin
+  password = var.admin_password
   port     = 5432
 
   # Network Configuration
