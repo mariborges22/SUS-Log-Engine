@@ -14,7 +14,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+      TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
     defaults:
       run:
         working-directory: ./infra
