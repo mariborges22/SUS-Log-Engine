@@ -44,7 +44,7 @@ variable "db_username" {
   sensitive   = true
 }
 
-variable "db_password" {
+variable "admin_password" {
   description = "Senha do administrador do banco (injetada via GitHub Actions)"
   type        = string
   sensitive   = true
