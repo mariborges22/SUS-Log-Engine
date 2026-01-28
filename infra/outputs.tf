@@ -86,6 +86,7 @@ output "database_connection_string" {
 output "database_connection_string_template" {
   description = "Template da connection string (substituir PASSWORD)"
   value       = "postgresql://${aws_db_instance.postgres.username}:PASSWORD@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${aws_db_instance.postgres.db_name}?sslmode=require"
+  sensitive   = true
 }
 
 # ==============================================================================
