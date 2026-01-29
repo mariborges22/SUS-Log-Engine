@@ -294,6 +294,13 @@ resource "aws_db_parameter_group" "postgres" {
   name   = "${var.project_name}-postgres-params"
   family = "postgres15"
 
+  parameter {
+    name         = "shared_preload_libraries"
+    value        = "postgis"
+    apply_method = "pending-reboot"  # ← CORRETO
+  }
+
+
   # Parâmetros otimizados para alta performance com Hash Tables e B-Trees
   parameter {
     name         = "shared_buffers"
