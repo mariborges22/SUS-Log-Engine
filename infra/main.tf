@@ -309,7 +309,6 @@ resource "aws_db_parameter_group" "postgres" {
   parameter {
     name         = "shared_preload_libraries"
     value        = "postgis"
-    apply_method = "pending-reboot"  # ← CORRETO
   }
 
 
@@ -317,7 +316,6 @@ resource "aws_db_parameter_group" "postgres" {
   parameter {
     name         = "shared_buffers"
     value        = "{DBInstanceClassMemory/4096}"
-    apply_method = "pending-reboot"
   }
 
   parameter {
