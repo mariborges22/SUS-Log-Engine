@@ -5,16 +5,129 @@ on:
     workflows: ["Build and Push Engine (Compiler)", "Build and Push ETL Pipeline", "Build and Push Frontend"]
     types:
       - completed
+    branches:
+      - main  # ← Só deploy automático na main
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform Action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+          - fix-parameter-group
+      confirm_destroy:
+        description: '⚠️ Para DESTROY, digite: DESTRUIR-INFRA-NEXUS-SUS'
+        required: false
+        type: string
+        default: ''
+      target_environment:
+        description: 'Environment alvo'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
 
+# ==============================================================================
+# PERMISSÕES MÍNIMAS (Principle of Least Privilege)
+# ==============================================================================
+permissions:
+  contents: read
+  id-token: write
+
+# ==============================================================================
+# JOBS
+# ==============================================================================
 jobs:
-  terraform-deploy:
-    name: Terraform Apply
+  # ============================================================================
+  # VALIDAÇÃO DE SEGURANÇA (roda sempre primeiro)
+  # ============================================================================
+  security-check:
+    name: 🔐 Security Validation
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      is_safe: ${{ steps.validate.outputs.is_safe }}
+      action: ${{ github.event.inputs.action || 'apply' }}
+    steps:
+      - name: Validate Branch
+        id: branch-check
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "🔍 Branch atual: $BRANCH"
+          
+          # Só permite deploy de branches protegidas
+          if [[ "$BRANCH" != "main" && "$BRANCH" != "develop" && "$BRANCH" != "staging" ]]; then
+            echo "❌ ERRO: Deploy só permitido das branches: main, develop, staging"
+            echo "   Branch atual: $BRANCH"
+            exit 1
+          fi
+          echo "✅ Branch válida para deploy"
+
+      - name: Validate Destroy Confirmation
+        id: validate
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          CONFIRM="${{ github.event.inputs.confirm_destroy }}"
+          ENV="${{ github.event.inputs.target_environment }}"
+          
+          echo "📋 Ação solicitada: $ACTION"
+          echo "🌍 Environment: $ENV"
+          
+          # Bloquear destroy em produção sem confirmação correta
+          if [[ "$ACTION" == "destroy" ]]; then
+            echo "⚠️ =============================================="
+            echo "⚠️  AÇÃO DESTRUTIVA DETECTADA: DESTROY"
+            echo "⚠️ =============================================="
+            
+            EXPECTED_CONFIRM="DESTRUIR-INFRA-NEXUS-SUS"
+            
+            if [[ "$CONFIRM" != "$EXPECTED_CONFIRM" ]]; then
+              echo "❌ ERRO: Confirmação inválida para destroy!"
+              echo "   Esperado: $EXPECTED_CONFIRM"
+              echo "   Recebido: $CONFIRM"
+              echo ""
+              echo "💡 Para destruir a infraestrutura, você DEVE digitar:"
+              echo "   $EXPECTED_CONFIRM"
+              echo "   no campo 'confirm_destroy'"
+              exit 1
+            fi
+            
+            if [[ "$ENV" == "production" ]]; then
+              echo "🚨 =============================================="
+              echo "🚨  ALERTA CRÍTICO: DESTROY EM PRODUÇÃO!"
+              echo "🚨 =============================================="
+              echo ""
+              echo "Você está prestes a DESTRUIR a infraestrutura de PRODUÇÃO!"
+              echo "Esta ação é IRREVERSÍVEL."
+              echo ""
+            fi
+            
+            echo "✅ Confirmação de destroy válida"
+          fi
+          
+          echo "is_safe=true" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # TERRAFORM PLAN/APPLY (ações não-destrutivas)
+  # ============================================================================
+  terraform-deploy:
+    name: Terraform - ${{ github.event.inputs.action || 'apply' }}
+    runs-on: ubuntu-latest
+    needs: security-check
+    if: |
+      needs.security-check.outputs.is_safe == 'true' && 
+      github.event.inputs.action != 'destroy' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
+      TF_VAR_environment: ${{ github.event.inputs.target_environment || 'development' }}
       TF_INPUT: "false"
     defaults:
       run:
@@ -38,8 +151,113 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
+      - name: Terraform Validate
+        run: terraform validate
+
+      # ========== PLAN ==========
       - name: Terraform Plan
+        if: ${{ github.event.inputs.action == 'plan' || github.event.inputs.action == '' }}
+        run: |
+          echo "📋 Executando Terraform Plan..."
+          terraform plan -input=false -detailed-exitcode || true
+
+      # ========== APPLY (default for workflow_run trigger) ==========
+      - name: Terraform Plan (for Apply)
+        if: ${{ github.event.inputs.action == 'apply' || github.event_name == 'workflow_run' }}
         run: terraform plan -input=false -out=tfplan
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false tfplan
+        if: ${{ github.event.inputs.action == 'apply' || github.event_name == 'workflow_run' }}
+        run: |
+          echo "🚀 Aplicando mudanças na infraestrutura..."
+          terraform apply -auto-approve -input=false tfplan
+          echo "✅ Infraestrutura atualizada com sucesso!"
+
+      # ========== FIX PARAMETER GROUP ==========
+      - name: Fix RDS Parameter Group (Replace)
+        if: ${{ github.event.inputs.action == 'fix-parameter-group' }}
+        run: |
+          echo "🔧 =============================================="
+          echo "🔧 FIX: Recriando RDS Parameter Group"
+          echo "🔧 =============================================="
+          echo ""
+          echo "ℹ️ Este comando recria o parameter group para corrigir"
+          echo "   erros de 'InvalidParameterCombination' com parâmetros estáticos."
+          echo ""
+          terraform plan -input=false -replace=aws_db_parameter_group.postgres -out=tfplan-fix
+          terraform apply -auto-approve -input=false tfplan-fix
+          echo ""
+          echo "✅ Parameter group recriado com sucesso!"
+          echo "⚠️ NOTA: Pode ser necessário reiniciar a instância RDS"
+          echo "   para que as mudanças de parâmetros estáticos tenham efeito."
+
+  # ============================================================================
+  # TERRAFORM DESTROY (job separado com proteções extras)
+  # ============================================================================
+  terraform-destroy:
+    name: 🚨 Terraform DESTROY
+    runs-on: ubuntu-latest
+    needs: security-check
+    if: |
+      needs.security-check.outputs.is_safe == 'true' && 
+      github.event.inputs.action == 'destroy'
+    # ⚠️ PROTEÇÃO: Requer aprovação do environment "production_destroy"
+    # Configure em: Settings > Environments > New environment > "production_destroy"
+    # Adicione "Required reviewers" com seu usuário
+    environment: production-destroy
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
+      TF_INPUT: "false"
+    defaults:
+      run:
+        working-directory: ./infra
+    steps:
+      - name: "⚠️ ALERTA: Ação Destrutiva"
+        run: |
+          echo "🚨 =============================================="
+          echo "🚨           TERRAFORM DESTROY"
+          echo "🚨 =============================================="
+          echo ""
+          echo "⚠️ ATENÇÃO: Esta ação irá DESTRUIR toda a infraestrutura!"
+          echo ""
+          echo "📋 Recursos que serão removidos:"
+          echo "   - VPC e todas as subnets"
+          echo "   - Security Groups"
+          echo "   - RDS PostgreSQL (dados serão PERDIDOS!)"
+          echo "   - ECR Repositories"
+          echo "   - S3 Data Lake"
+          echo "   - IAM Roles e Policies"
+          echo ""
+          echo "⏱️ Aguardando 10 segundos antes de prosseguir..."
+          sleep 10
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan (Destroy Preview)
+        run: |
+          echo "📋 Preview dos recursos que serão destruídos:"
+          terraform plan -destroy -input=false
+
+      - name: Terraform Destroy
+        run: |
+          echo "🚨 Iniciando destruição da infraestrutura..."
+          terraform destroy -auto-approve -input=false
+          echo ""
+          echo "💀 Infraestrutura destruída."
