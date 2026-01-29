@@ -42,6 +42,13 @@ permissions:
   id-token: write
 
 # ==============================================================================
+# CONCURRENCY - Evita deploys paralelos que causam VpcLimitExceeded
+# ==============================================================================
+concurrency:
+  group: terraform-${{ github.event.inputs.target_environment || 'development' }}
+  cancel-in-progress: false  # Aguarda na fila em vez de cancelar
+
+# ==============================================================================
 # JOBS
 # ==============================================================================
 jobs:
