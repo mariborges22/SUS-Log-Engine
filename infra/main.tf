@@ -55,6 +55,18 @@ resource "aws_vpc" "main" {
   }
 }
 
+lifecycle =  {
+    # Impede criar nova VPC se já existir uma
+    create_before_destroy = false
+    
+    # Previne deleção acidental
+    prevent_destroy = false  # Deixe false por enquanto para poder recriar se necessário
+    
+    # Ignora mudanças em tags se forem feitas manualmente
+    ignore_changes = []
+  }
+ 
+
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
