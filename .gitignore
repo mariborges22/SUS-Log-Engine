@@ -1,0 +1,12 @@
+@"
+
+# Terraform Local State (não commitar mais)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Backend config (OK commitar)
+!backend.tf
+"@ | Add-Content -Path ..\.gitignore
