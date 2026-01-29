@@ -149,7 +149,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: terraform init -input=false -reconfigure 
 
       - name: Terraform Validate
         run: terraform validate
@@ -248,7 +248,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: terraform init -input=false -reconfigure 
 
       - name: Terraform Plan (Destroy Preview)
         run: |
