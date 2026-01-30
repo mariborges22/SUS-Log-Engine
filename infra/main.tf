@@ -306,11 +306,12 @@ resource "aws_db_parameter_group" "postgres" {
   name   = "${var.project_name}-postgres-params-${var.environment}"
   family = "postgres15"
 
-  parameter {
-    name         = "shared_preload_libraries"
-    value        = "postgis"
-    apply_method = "pending-reboot"
-  }
+  # Removido 'shared_preload_libraries' pois 'postgis' é carregado via extensão, não preload direto nesta versão RDS
+  # parameter {
+  #   name         = "shared_preload_libraries"
+  #   value        = "postgis"
+  #   apply_method = "pending-reboot"
+  # }
 
 
   # Parâmetros otimizados para alta performance com Hash Tables e B-Trees
@@ -519,7 +520,7 @@ resource "aws_iam_role" "etl_role" {
 
 # Policy para leitura do S3 Data Lake
 resource "aws_iam_policy" "etl_s3_read" {
-  name        = "${var.project_name}-etl-s3-read-policy"
+  name        = "${var.project_name}-etl-s3-read-policy-${var.environment}"
   description = "Permite ao módulo ETL Python ler do bucket S3 Data Lake"
 
   policy = jsonencode({
@@ -555,7 +556,7 @@ resource "aws_iam_policy" "etl_s3_read" {
 
 # Policy para escrita no S3 (dados processados)
 resource "aws_iam_policy" "etl_s3_write" {
-  name        = "${var.project_name}-etl-s3-write-policy"
+  name        = "${var.project_name}-etl-s3-write-policy-${var.environment}"
   description = "Permite ao módulo ETL Python escrever dados processados no S3"
 
   policy = jsonencode({
@@ -582,7 +583,7 @@ resource "aws_iam_policy" "etl_s3_write" {
 
 # Policy para acesso ao ECR (pull de imagens)
 resource "aws_iam_policy" "etl_ecr_access" {
-  name        = "${var.project_name}-etl-ecr-access-policy"
+  name        = "${var.project_name}-etl-ecr-access-policy-${var.environment}"
   description = "Permite ao módulo ETL Python fazer pull de imagens do ECR"
 
   policy = jsonencode({

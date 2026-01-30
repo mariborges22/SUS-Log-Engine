@@ -88,5 +88,20 @@ jobs:
           # 4. Limpar IAM
           echo "🔑 Limpando IAM..."
           delete_iam_role "nexus-sus-etl-role"
-
-          echo "✅ Limpeza concluída! Agora você pode rodar o Terraform Apply."
+          
+          # Limpar Policies Órfãs
+          echo "📜 Limpando Policies..."
+          policies=("nexus-sus-etl-s3-read-policy" "nexus-sus-etl-s3-write-policy" "nexus-sus-etl-ecr-access-policy")
+          
+          for policy_name in "${policies[@]}"; do
+             echo "🗑️ Verificando Policy: $policy_name"
+             arn=$(aws iam list-policies --query "Policies[?PolicyName=='$policy_name'].Arn" --output text 2>/dev/null)
+             
+             if [[ -n "$arn" && "$arn" != "None" ]]; then
+                echo "   Encontrada ARN: $arn"
+                # Detach de todas as roles/users/groups (opcional, mas seguro)
+                aws iam delete-policy --policy-arn "$arn" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Erro ao deletar"
+             else
+                echo "   ⚠️ Não encontrada"
+             fi
+          done
