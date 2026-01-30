@@ -62,9 +62,9 @@ jobs:
             role=$1
             echo "🗑️ Verificando IAM Role: $role"
             # Remove policies anexadas antes
-            policies=$(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null)
+            policies=$(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || true)
             for policy in $policies; do
-              aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null
+              aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null || true
             done
             aws iam delete-role --role-name $role 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
           }
