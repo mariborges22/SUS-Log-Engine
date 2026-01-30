@@ -69,29 +69,40 @@ jobs:
             aws iam delete-role --role-name $role 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
           }
 
-          # 1. Limpar ECR Repos (nomes antigos hardcoded)
-          echo "📦 Limpando ECR Repositories..."
-          delete_ecr "nexus-sus-etl"
-          delete_ecr "nexus-sus-frontend"
-          delete_ecr "nexus-sus-engine"
-          delete_ecr "nexus-sus-api"
 
-          # 2. Limpar RDS
+          # 1. Limpar ECR Repos (nomes antigos e staging)
+          echo "📦 Limpando ECR Repositories..."
+          repos=("nexus-sus-etl" "nexus-sus-frontend" "nexus-sus-engine" "nexus-sus-api")
+          for repo in "${repos[@]}"; do
+            delete_ecr "$repo"
+            delete_ecr "$repo-staging"
+          done
+
+          # 2. Limpar RDS (antigos e staging)
           echo "🗄️ Limpando RDS..."
           delete_rds_subnet "nexus-sus-db-subnet-group"
+          delete_rds_subnet "nexus-sus-db-subnet-group-staging"
+          
           delete_rds_param "nexus-sus-postgres-params"
+          delete_rds_param "nexus-sus-postgres-params-staging"
 
-          # 3. Limpar S3
+          # 3. Limpar S3 (antigos e staging)
           echo "🪣 Limpando S3..."
           delete_s3 "nexus-sus-data-lake"
+          delete_s3 "nexus-sus-data-lake-staging"
 
-          # 4. Limpar IAM
+          # 4. Limpar IAM (antigos e staging)
           echo "🔑 Limpando IAM..."
           delete_iam_role "nexus-sus-etl-role"
+          delete_iam_role "nexus-sus-etl-role-staging"
           
           # Limpar Policies Órfãs
           echo "📜 Limpando Policies..."
-          policies=("nexus-sus-etl-s3-read-policy" "nexus-sus-etl-s3-write-policy" "nexus-sus-etl-ecr-access-policy")
+          policies=(
+            "nexus-sus-etl-s3-read-policy" "nexus-sus-etl-s3-read-policy-staging"
+            "nexus-sus-etl-s3-write-policy" "nexus-sus-etl-s3-write-policy-staging"
+            "nexus-sus-etl-ecr-access-policy" "nexus-sus-etl-ecr-access-policy-staging"
+          )
           
           for policy_name in "${policies[@]}"; do
              echo "🗑️ Verificando Policy: $policy_name"
