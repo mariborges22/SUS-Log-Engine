@@ -1,5 +1,3 @@
-@"
-
 # Terraform Local State (não commitar mais)
 *.tfstate
 *.tfstate.*
@@ -9,4 +7,3 @@
 
 # Backend config (OK commitar)
 !backend.tf
-"@ | Add-Content -Path ..\.gitignore
