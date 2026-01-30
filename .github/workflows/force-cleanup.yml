@@ -54,7 +54,7 @@ jobs:
             bucket=$1
             echo "🗑️ Verificando S3 Bucket: $bucket"
             # Tenta esvaziar primeiro
-            aws s3 rm s3://$bucket --recursive 2>/dev/null
+            aws s3 rm s3://$bucket --recursive 2>/dev/null || true
             aws s3 rb s3://$bucket --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
           }
 
