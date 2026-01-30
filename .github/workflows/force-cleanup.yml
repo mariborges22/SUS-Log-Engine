@@ -1,0 +1,92 @@
+name: 🧹 Force Cleanup Orphaned Resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_cleanup:
+        description: 'Digite "CLEANUP" para confirmar a exclusão dos recursos conflitantes'
+        required: true
+        default: ''
+
+jobs:
+  cleanup:
+    name: 🧹 AWS Resource Cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validation
+        run: |
+          if [[ "${{ github.event.inputs.confirm_cleanup }}" != "CLEANUP" ]]; then
+            echo "❌ Confirmação inválida. Digite CLEANUP para prosseguir."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Delete Orphaned Resources
+        run: |
+          echo "🚀 Iniciando limpeza de recursos órfãos..."
+
+          # Funções auxiliares para não falhar o script se o recurso não existir
+          delete_ecr() {
+            repo=$1
+            echo "🗑️ Verificando ECR: $repo"
+            aws ecr delete-repository --repository-name $repo --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+          }
+
+          delete_rds_subnet() {
+            name=$1
+            echo "🗑️ Verificando RDS Subnet Group: $name"
+            aws rds delete-db-subnet-group --db-subnet-group-name $name 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+          }
+
+          delete_rds_param() {
+            name=$1
+            echo "🗑️ Verificando RDS Param Group: $name"
+            aws rds delete-db-parameter-group --db-parameter-group-name $name 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+          }
+
+          delete_s3() {
+            bucket=$1
+            echo "🗑️ Verificando S3 Bucket: $bucket"
+            # Tenta esvaziar primeiro
+            aws s3 rm s3://$bucket --recursive 2>/dev/null
+            aws s3 rb s3://$bucket --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+          }
+
+          delete_iam_role() {
+            role=$1
+            echo "🗑️ Verificando IAM Role: $role"
+            # Remove policies anexadas antes
+            policies=$(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null)
+            for policy in $policies; do
+              aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null
+            done
+            aws iam delete-role --role-name $role 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+          }
+
+          # 1. Limpar ECR Repos (nomes antigos hardcoded)
+          echo "📦 Limpando ECR Repositories..."
+          delete_ecr "nexus-sus-etl"
+          delete_ecr "nexus-sus-frontend"
+          delete_ecr "nexus-sus-engine"
+          delete_ecr "nexus-sus-api"
+
+          # 2. Limpar RDS
+          echo "🗄️ Limpando RDS..."
+          delete_rds_subnet "nexus-sus-db-subnet-group"
+          delete_rds_param "nexus-sus-postgres-params"
+
+          # 3. Limpar S3
+          echo "🪣 Limpando S3..."
+          delete_s3 "nexus-sus-data-lake"
+
+          # 4. Limpar IAM
+          echo "🔑 Limpando IAM..."
+          delete_iam_role "nexus-sus-etl-role"
+
+          echo "✅ Limpeza concluída! Agora você pode rodar o Terraform Apply."
