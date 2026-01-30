@@ -1,0 +1,73 @@
+name: 🏗️ Bootstrap Terraform Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_bootstrap:
+        description: 'Digite "BOOTSTRAP" para criar Bucket S3 e DynamoDB'
+        required: true
+        default: ''
+
+jobs:
+  bootstrap:
+    name: 🏗️ Create Backend Resources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validation
+        run: |
+          if [[ "${{ github.event.inputs.confirm_bootstrap }}" != "BOOTSTRAP" ]]; then
+            echo "❌ Confirmação inválida. Digite BOOTSTRAP para prosseguir."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Create S3 Backend Bucket
+        run: |
+          BUCKET="nexus-sus-terraform-state"
+          REGION="${{ secrets.AWS_REGION }}"
+          
+          echo "📦 Verificando Bucket S3: $BUCKET"
+          
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "✅ Bucket já existe."
+          else
+            echo "🚀 Criando bucket..."
+            if [[ "$REGION" == "us-east-1" ]]; then
+              aws s3api create-bucket --bucket "$BUCKET" --region "$REGION"
+            else
+              aws s3api create-bucket --bucket "$BUCKET" --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION"
+            fi
+            
+            echo "🔒 Habilitando versionamento..."
+            aws s3api put-bucket-versioning --bucket "$BUCKET" --versioning-configuration Status=Enabled
+            
+            echo "🔐 Habilitando criptografia..."
+            aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
+            
+            echo "✅ Bucket criado com sucesso!"
+          fi
+
+      - name: Create DynamoDB Lock Table
+        run: |
+          TABLE="nexus-sus-terraform-lock"
+          
+          echo "🗄️ Verificando DynamoDB Table: $TABLE"
+          
+          if aws dynamodb describe-table --table-name "$TABLE" 2>/dev/null; then
+            echo "✅ Tabela já existe."
+          else
+            echo "🚀 Criando tabela..."
+            aws dynamodb create-table \
+              --table-name "$TABLE" \
+              --attribute-definitions AttributeName=LockID,AttributeType=S \
+              --key-schema AttributeName=LockID,KeyType=HASH \
+              --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1
+              
+            echo "✅ Tabela criada com sucesso!"
+          fi
