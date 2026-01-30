@@ -351,10 +351,7 @@ resource "aws_db_parameter_group" "postgres" {
   }
 }
 
-# Service Linked Role para RDS (Necessário para contas novas/limpas)
-resource "aws_iam_service_linked_role" "rds" {
-  aws_service_name = "rds.amazonaws.com"
-}
+
 
 resource "aws_db_instance" "postgres" {
   identifier = "${var.project_name}-postgres"
