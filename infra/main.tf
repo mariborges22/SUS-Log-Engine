@@ -379,7 +379,7 @@ resource "aws_db_instance" "postgres" {
   parameter_group_name = aws_db_parameter_group.postgres.name
 
   # Backup Configuration
-  backup_retention_period = 7
+  backup_retention_period = 1 # Free Tier Limit
   backup_window           = "03:00-04:00"
   maintenance_window      = "Mon:04:00-Mon:05:00"
 
