@@ -1,0 +1,57 @@
+name: 📤 Upload Data to S3
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Environment alvo (staging/production)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+  push:
+    paths:
+      - 'data/**'
+    branches:
+      - staging
+      - main
+
+jobs:
+  upload:
+    name: 🚀 S3 Upload (O(1))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload Data to S3
+        run: |
+          # Define Environment (Push -> staging by default logic verify branch, Dispatch -> input)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.target_environment }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="production"
+          else
+            ENV="staging"
+          fi
+          
+          PROJECT_NAME="nexus-sus"
+          BUCKET_NAME="${PROJECT_NAME}-data-lake-${ENV}"
+          
+          echo "🎯 Target Bucket: $BUCKET_NAME"
+          echo "📂 Uploading data/ folder..."
+          
+          # Sync com delete para manter espelho exato (mais eficiente que cp recursivo se houver updates)
+          # ou cp --recursive se preferir apenas adicionar
+          aws s3 cp ./data s3://$BUCKET_NAME/raw/ --recursive
+          
+          echo "✅ Upload Completo!"
