@@ -53,8 +53,9 @@ resource "aws_vpc" "main" {
   tags = {
     Name = "${var.project_name}-vpc"
   }
+}
 
-  lifecycle {
+lifecycle =  {
     # Impede criar nova VPC se já existir uma
     create_before_destroy = false
     
@@ -64,7 +65,6 @@ resource "aws_vpc" "main" {
     # Ignora mudanças em tags se forem feitas manualmente
     ignore_changes = []
   }
-}
  
 
 resource "aws_internet_gateway" "main" {
@@ -234,7 +234,7 @@ resource "aws_security_group" "rds" {
 
 resource "aws_ecr_repository" "repos" {
   for_each             = toset(var.ecr_repositories)
-  name                 = "${each.value}-${var.environment}"
+  name                 = each.value
   image_tag_mutability = var.ecr_image_tag_mutability
 
   image_scanning_configuration {
@@ -294,7 +294,7 @@ resource "aws_ecr_lifecycle_policy" "repos" {
 # ==============================================================================
 
 resource "aws_db_subnet_group" "main" {
-  name       = "${var.project_name}-db-subnet-group-${var.environment}"
+  name       = "${var.project_name}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
 
   tags = {
@@ -303,12 +303,13 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_parameter_group" "postgres" {
-  name   = "${var.project_name}-postgres-params-${var.environment}"
+  name   = "${var.project_name}-postgres-params"
   family = "postgres15"
 
   parameter {
     name         = "shared_preload_libraries"
     value        = "postgis"
+    apply_method = "pending-reboot"  # ← CORRETO
   }
 
 
@@ -316,6 +317,7 @@ resource "aws_db_parameter_group" "postgres" {
   parameter {
     name         = "shared_buffers"
     value        = "{DBInstanceClassMemory/4096}"
+    apply_method = "pending-reboot"
   }
 
   parameter {
@@ -400,7 +402,7 @@ resource "aws_db_instance" "postgres" {
 # ==============================================================================
 
 resource "aws_s3_bucket" "data_lake" {
-  bucket = "nexus-sus-data-lake-${var.environment}"
+  bucket = "nexus-sus-data-lake"
 
   tags = {
     Name        = "nexus-sus-data-lake"
@@ -491,7 +493,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
 
 # IAM Role para o ETL Python
 resource "aws_iam_role" "etl_role" {
-  name = "${var.project_name}-etl-role-${var.environment}"
+  name = "${var.project_name}-etl-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
