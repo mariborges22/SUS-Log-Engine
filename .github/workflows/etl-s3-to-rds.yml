@@ -24,15 +24,14 @@ jobs:
         run: |
           mkdir -p package
           
-          # 1. Instalar dependências no diretório pacote
-          # Usa --platform manylinux2014_x86_64 --only-binary=:all: para garantir compatibilidade com Lambda
+          # 1. Instalar dependências (boto3 já existe na Lambda AWS, removendo para economizar espaço)
           pip install \
             --platform manylinux2014_x86_64 \
             --target ./package \
             --implementation cp \
             --python-version 3.11 \
             --only-binary=:all: --upgrade \
-            pandas sqlalchemy psycopg2-binary boto3
+            pandas sqlalchemy psycopg2-binary
 
           # 2. Copiar script ETL e SQL Schema
           cp nexus-sus-etl/extrair_sus.py ./package/
@@ -44,25 +43,38 @@ jobs:
           cd ..
           
           echo "📦 Pacote ZIP criado: deployment_package.zip"
+          du -h deployment_package.zip
 
       - name: 🚀 Deploy & Invoke Lambda
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          LAMBDA_NAME: "nexus-sus-etl-staging" # Assumindo staging, ou use lógica de env
         run: |
-          # Define Environment logic equivalent to Deploy workflow
+          # Define Environment logic
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="production"
             LAMBDA_NAME="nexus-sus-etl-production"
           else
-             LAMBDA_NAME="nexus-sus-etl-staging"
+            ENV="staging"
+            LAMBDA_NAME="nexus-sus-etl-staging"
           fi
-        
-          echo "🚀 Updating Lambda Code for: $LAMBDA_NAME"
+          
+          BUCKET_NAME="nexus-sus-data-lake-${ENV}"
+          S3_KEY="artifacts/lambda/etl-${{ github.sha }}.zip"
+          
+          echo "🚀 Config: Lambda=$LAMBDA_NAME | Bucket=$BUCKET_NAME"
+          
+          # 1. Upload para S3 (Bypass no limite de 50MB direct upload)
+          echo "📤 Uploading package to s3://$BUCKET_NAME/$S3_KEY"
+          aws s3 cp deployment_package.zip s3://$BUCKET_NAME/$S3_KEY
+          
+          # 2. Update Lambda Code via S3
+          echo "🔄 Updating Function Code..."
           aws lambda update-function-code \
             --function-name $LAMBDA_NAME \
-            --zip-file fileb://deployment_package.zip
+            --s3-bucket $BUCKET_NAME \
+            --s3-key $S3_KEY
 
           echo "⏳ Waiting for update..."
           sleep 10
