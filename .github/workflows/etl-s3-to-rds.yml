@@ -1,0 +1,65 @@
+name: 🔄 ETL Pipeline (S3 -> RDS)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Agendado para 2:00 AM UTC diariamente
+  workflow_dispatch:      # Gatilho manual para testes
+
+jobs:
+  etl_process:
+    name: 🏭 Run ETL Data Pipeline
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f etl/requirements.txt ]; then
+            pip install -r etl/requirements.txt
+          else
+            # Mínimo necessário se não houver requirements.txt ainda
+            pip install pandas psycopg2-binary sqlalchemy boto3
+          fi
+
+      - name: 🛢️ Setup Database Schema
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.Endpoint }}
+          DB_USER: ${{ secrets.User }}
+          DB_NAME: ${{ secrets.DBName }}
+        run: |
+          echo "Verificando/Criando tabela 'indicadores_sus'..."
+          # Usa psql nativo do runner para rodar o schema.sql
+          psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f etl/create_table.sql
+
+      - name: 🚀 Run ETL Script
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: "nexus-sus-data-lake-production" # Hardcoded conforme solicitado, ou use secrets
+          S3_KEY: "dados_brutos.json"
+          DB_HOST: ${{ secrets.Endpoint }}
+          DB_USER: ${{ secrets.User }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DBName }}
+        run: |
+          echo "Iniciando processamento Python..."
+          python etl/extrair_sus.py
+
+      - name: ✅ Notify Success
+        if: success()
+        run: echo "ETL Pipeline concluído com sucesso!"
+
+      - name: ❌ Notify Failure
+        if: failure()
+        run: echo "pipeline ETL falhou. Verifique os logs."
