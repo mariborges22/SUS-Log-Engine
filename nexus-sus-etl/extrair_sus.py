@@ -147,6 +147,17 @@ def load_to_rds(df: pd.DataFrame):
         pool_recycle=1800        # Reciclar conexões antigas
     )
 
+    # 0. Garantir Schema (Self-Healing)
+    # Como não conseguimos rodar psql externo, a Lambda cria a tabela se não existir
+    try:
+        with open('create_table.sql', 'r') as f:
+            ddl_sql = f.read()
+            with engine.begin() as conn:
+                conn.execute(text(ddl_sql))
+            logger.info("Schema garantido com sucesso (DDL executado).")
+    except Exception as e:
+        logger.warning(f"Erro ao tentar executar DDL (pode já existir): {e}")
+
     upsert_sql = text("""
         INSERT INTO indicadores_sus (estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_competencia, dt_atualizacao)
         VALUES (:estado, :regiao, :vl_uf, :vl_regiao, :vl_brasil, :dt_competencia, :dt_atualizacao)
@@ -175,8 +186,11 @@ def load_to_rds(df: pd.DataFrame):
 
     logger.info(f"Carga concluída! Total processado: {total_rows} registros.")
 
-def main():
-    logger.info("=== INICIANDO PIPELINE ETL NEXUS-SUS ===")
+def lambda_handler(event, context):
+    """
+    AWS Lambda Handler Entry Point
+    """
+    logger.info("=== INICIANDO PIPELINE ETL NEXUS-SUS (LAMBDA) ===")
     start_time = time.time()
     
     try:
@@ -192,9 +206,12 @@ def main():
         elapsed = time.time() - start_time
         logger.info(f"=== PIPELINE FINALIZADO COM SUCESSO em {elapsed:.2f}s ===")
         
+        return {
+            'statusCode': 200,
+            'body': f'ETL Success. Processed {len(df_clean)} records in {elapsed:.2f}s'
+        }
+        
     except Exception as e:
         logger.critical(f"Pipeline falhou: {e}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+        # Lambda deve levantar exceção para ser marcada como erro no CloudWatch
+        raise e

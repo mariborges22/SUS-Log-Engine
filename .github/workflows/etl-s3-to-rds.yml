@@ -20,46 +20,72 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 📦 Install Dependencies
+      - name: 📦 Create Lambda Deployment Package
         run: |
-          python -m pip install --upgrade pip
-          if [ -f nexus-sus-etl/requirements.txt ]; then
-            pip install -r nexus-sus-etl/requirements.txt
-          else
-            # Mínimo necessário se não houver requirements.txt ainda
-            pip install pandas psycopg2-binary sqlalchemy boto3
-          fi
+          mkdir -p package
+          
+          # 1. Instalar dependências no diretório pacote
+          # Usa --platform manylinux2014_x86_64 --only-binary=:all: para garantir compatibilidade com Lambda
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --target ./package \
+            --implementation cp \
+            --python-version 3.11 \
+            --only-binary=:all: --upgrade \
+            pandas sqlalchemy psycopg2-binary boto3
 
-      - name: 🛢️ Setup Database Schema
-        env:
-          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ secrets.Endpoint }}
-          DB_USER: ${{ secrets.User }}
-          DB_NAME: ${{ secrets.DBName }}
-        run: |
-          echo "Verificando/Criando tabela 'indicadores_sus'..."
-          # Usa psql nativo do runner para rodar o schema.sql
-          psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f nexus-sus-etl/create_table.sql
+          # 2. Copiar script ETL e SQL Schema
+          cp nexus-sus-etl/extrair_sus.py ./package/
+          cp nexus-sus-etl/create_table.sql ./package/
+          
+          # 3. Zipar tudo
+          cd package
+          zip -r ../deployment_package.zip .
+          cd ..
+          
+          echo "📦 Pacote ZIP criado: deployment_package.zip"
 
-      - name: 🚀 Run ETL Script
+      - name: 🚀 Deploy & Invoke Lambda
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          S3_BUCKET_NAME: "nexus-sus-data-lake-production" # Hardcoded conforme solicitado, ou use secrets
-          S3_KEY: "dados_brutos.json"
-          DB_HOST: ${{ secrets.Endpoint }}
-          DB_USER: ${{ secrets.User }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DBName }}
+          LAMBDA_NAME: "nexus-sus-etl-staging" # Assumindo staging, ou use lógica de env
         run: |
-          echo "Iniciando processamento Python..."
-          python nexus-sus-etl/extrair_sus.py
+          # Define Environment logic equivalent to Deploy workflow
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            LAMBDA_NAME="nexus-sus-etl-production"
+          else
+             LAMBDA_NAME="nexus-sus-etl-staging"
+          fi
+        
+          echo "🚀 Updating Lambda Code for: $LAMBDA_NAME"
+          aws lambda update-function-code \
+            --function-name $LAMBDA_NAME \
+            --zip-file fileb://deployment_package.zip
+
+          echo "⏳ Waiting for update..."
+          sleep 10
+          
+          echo "⚡ Invoking Lambda..."
+          aws lambda invoke \
+            --function-name $LAMBDA_NAME \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            response.json
+            
+          echo "📄 Lambda Output:"
+          cat response.json
+          
+          if grep -q "ErrorMessage" response.json; then
+            echo "❌ ETL Falhou!"
+            exit 1
+          fi
 
       - name: ✅ Notify Success
         if: success()
-        run: echo "ETL Pipeline concluído com sucesso!"
+        run: echo "ETL (Lambda) Concluído com Sucesso!"
 
       - name: ❌ Notify Failure
         if: failure()
-        run: echo "pipeline ETL falhou. Verifique os logs."
+        run: echo "ETL Falhou. Verifique os logs da Lambda no CloudWatch."
