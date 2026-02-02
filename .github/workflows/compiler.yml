@@ -3,7 +3,7 @@ name: Build and Push Engine (Compiler)
 on:
   push:
     paths:
-      - 'engine/**'
+      - 'nexus-sus-engine/**'
     branches:
       - main
       - staging
