@@ -1,0 +1,16 @@
+# Ignorar JSONs pesados para aliviar o contexto do build
+*.json
+
+# Ignorar logs de execução
+*.log
+
+# Ignorar versionamento git
+.git
+.gitignore
+
+# Ignorar artefatos de build local
+build/
+bin/
+*.o
+*.exe
+engine_service

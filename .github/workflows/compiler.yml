@@ -13,6 +13,10 @@ jobs:
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Previne builds infinito
+    concurrency: 
+      group: build-and-push-engine
+      cancel-in-progress: true
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
     steps:

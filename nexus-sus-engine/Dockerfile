@@ -1,5 +1,6 @@
 # Estágio 1: Builder (Oficina de Alta Performance)
 FROM debian:bookworm-slim AS builder
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Instalação das dependências de build e da LIBPQ para o Postgres
 RUN apt-get update && apt-get install -y \
@@ -17,6 +18,7 @@ RUN g++ -O3 compiler.cpp -o engine_service -lpq
 
 # Estágio 2: Runtime (Leve e Sustentável)
 FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Instalamos apenas a libpq5 (runtime) para o binário funcionar
 RUN apt-get update && apt-get install -y \
