@@ -5,7 +5,7 @@ on:
     paths:
       - 'nexus-sus-engine/**'
     branches:
-      - main
+      - master
       - staging
 
 jobs:
