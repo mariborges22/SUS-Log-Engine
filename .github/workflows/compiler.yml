@@ -6,6 +6,7 @@ on:
       - 'engine/**'
     branches:
       - main
+      - staging
 
 jobs:
   build-and-push:
