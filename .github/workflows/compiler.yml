@@ -35,5 +35,5 @@ jobs:
           ECR_REPOSITORY: nexus-sus-engine
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest engine/
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest nexus-sus-engine/
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
