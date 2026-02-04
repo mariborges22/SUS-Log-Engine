@@ -13,6 +13,10 @@ on:
       - 'etl/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   cpp-lint:
     name: C++ Lint (Engine)
@@ -25,7 +29,7 @@ jobs:
           style: 'file'
           tidy-checks: ''
           path: 'engine'
-
+  
   go-lint:
     name: Go Lint (API)
     runs-on: ubuntu-latest
