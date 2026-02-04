@@ -11,6 +11,7 @@ on:
       - 'engine/**'
       - 'api/**'
       - 'etl/**'
+  workflow_dispatch:
 
 jobs:
   cpp-lint:
