@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+  packages: read
 
 jobs:
   cpp-lint:
