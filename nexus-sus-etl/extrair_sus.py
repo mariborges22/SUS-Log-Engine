@@ -1,13 +1,14 @@
-import boto3
-import pandas as pd
-from sqlalchemy import create_engine, text
-import os
 import logging
+import os
 import sys
 import time
-from urllib.parse import quote_plus
 from io import StringIO
+from urllib.parse import quote_plus
+
+import boto3
+import pandas as pd
 from botocore.exceptions import ClientError, NoCredentialsError
+from sqlalchemy import create_engine, text
 
 # Configuração de Logging Centralizado
 logging.basicConfig(
@@ -122,7 +123,9 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     numeric_cols = ["vl_uf", "vl_regiao", "vl_brasil"]
     for col in numeric_cols:
         df_transformed[col] = (
-            pd.to_numeric(df_transformed[col], errors="coerce").fillna(0.0).astype(float)
+            pd.to_numeric(df_transformed[col], errors="coerce")
+            .fillna(0.0)
+            .astype(float)
         )
 
     # 3. Remover Duplicatas (Regra de Negócio: Estado + Competência deve ser único)
@@ -181,8 +184,7 @@ def load_to_rds(df: pd.DataFrame):
     except Exception as e:
         logger.warning(f"Erro ao tentar executar DDL (pode já existir): {e}")
 
-    upsert_sql = text(
-        """
+    upsert_sql = text("""
         INSERT INTO indicadores_sus (estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_competencia, dt_atualizacao)
         VALUES (:estado, :regiao, :vl_uf, :vl_regiao, :vl_brasil, :dt_competencia, :dt_atualizacao)
         ON CONFLICT (estado, dt_competencia) 
@@ -191,8 +193,7 @@ def load_to_rds(df: pd.DataFrame):
             vl_regiao = EXCLUDED.vl_regiao,
             vl_brasil = EXCLUDED.vl_brasil,
             dt_atualizacao = EXCLUDED.dt_atualizacao;
-    """
-    )
+    """)
 
     # Batch Insert (500 rows por vez)
     batch_size = 500
