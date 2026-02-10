@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -29,10 +32,24 @@ type Indicador struct {
 var (
 	engineStdin  io.WriteCloser
 	engineStdout *bufio.Scanner
+	ufRegex      = regexp.MustCompile(`^[A-Z]{2}$`)
+	// Rate Limiting: 5 requisições por segundo para proteger hardware limitado (512MB)
+	rateLimitChannel = make(chan struct{}, 5)
 )
 
+func init() {
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		for range ticker.C {
+			select {
+			case rateLimitChannel <- struct{}{}:
+			default:
+			}
+		}
+	}()
+}
+
 func initEngine() {
-	// Caminho para o binário C++ (ajustar conforme o ambiente)
 	cmd := exec.Command("./nexus-sus-engine/compiler")
 	
 	var err error
@@ -66,6 +83,7 @@ func loadFromDB() {
 	}
 	defer db.Close()
 
+	// SQLi Defense: Query parametrizada (padrão do lib/pq)
 	rows, err := db.Query("SELECT estado, regiao, valor_uf, valor_regiao, valor_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
 	if err != nil {
 		log.Println("Erro ao buscar indicadores:", err)
@@ -73,6 +91,7 @@ func loadFromDB() {
 	}
 	defer rows.Close()
 
+	var mu sync.Mutex
 	for rows.Next() {
 		var ind Indicador
 		if err := rows.Scan(&ind.Estado, &ind.Regiao, &ind.VlUF, &ind.VlRegiao, &ind.VlBrasil, &ind.DtCompetencia, &ind.DtAtualizacao); err != nil {
@@ -80,23 +99,44 @@ func loadFromDB() {
 			continue
 		}
 
-		// Injeta no C++ via L (Load)
-		// Formato: L <UF> <REGIAO> <V_UF> <V_REG> <V_BR> <COMPETENCIA> <ATUALIZACAO>
+		// Sanitização rigorosa antes do pipe
+		safeUF := strings.ToUpper(strings.TrimSpace(ind.Estado))
+		if !ufRegex.MatchString(safeUF) {
+			continue 
+		}
+		safeRegiao := strings.ReplaceAll(strings.TrimSpace(ind.Regiao), " ", "_")
+
+		mu.Lock()
 		fmt.Fprintf(engineStdin, "L %s %s %.2f %.2f %.2f %s %s\n",
-			ind.Estado, strings.ReplaceAll(ind.Regiao, " ", "_"), ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+			safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+		mu.Unlock()
 	}
 	log.Println("Carga de dados no Engine C++ concluída.")
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
-	uf := r.URL.Query().Get("estado")
-	if uf == "" {
-		http.Error(w, "Parâmetro 'estado' é obrigatório", http.StatusBadRequest)
+	// CORS para o frontend TypeScript
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	
+	// Rate Limiting check
+	select {
+	case <-rateLimitChannel:
+		// Permitido
+	default:
+		http.Error(w, "Muitas requisições. Tente novamente em breve.", http.StatusTooManyRequests)
 		return
 	}
 
-	// Envia comando de Query ao C++
-	fmt.Fprintf(engineStdin, "Q %s\n", strings.ToUpper(uf))
+	uf := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("estado")))
+	
+	// Validação de Input (Prevenção de Buffer Overflow e Comando Injection no C++)
+	if !ufRegex.MatchString(uf) {
+		http.Error(w, "Estado inválido. Use 2 letras (ex: SP)", http.StatusBadRequest)
+		return
+	}
+
+	// Envia comando de Query ao C++ (Q <UF>)
+	fmt.Fprintf(engineStdin, "Q %s\n", uf)
 
 	// Lê a resposta do C++
 	if engineStdout.Scan() {
@@ -124,3 +164,4 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
