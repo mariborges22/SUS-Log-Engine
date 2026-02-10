@@ -1,0 +1,105 @@
+name: Unified Multi-Layer CI/CD
+
+on:
+  push:
+    branches: [ staging, main ]
+  pull_request:
+    branches: [ staging, main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. Camada de Processamento (C++)
+  engine-audit:
+    name: Core Engine (DSA & Memory)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-sus-engine
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format cppcheck valgrind python3
+          
+      - name: Code Style Check
+        run: find . -name "*.cpp" | xargs clang-format --style=file --dry-run -Werror
+        
+      - name: Static Security Analysis
+        run: cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem .
+        
+      - name: Compile Engine
+        run: g++ -O3 compiler.cpp -o compiler
+        
+      - name: DSA Stress Test (O(1) Validation)
+        run: python3 test_engine.py
+        
+      - name: Memory Hygiene (Leak Check)
+        run: |
+          echo "L SP Sudeste 100.0 200.0 300.0 202310 20231101" > input.txt
+          echo "Q SP" >> input.txt
+          echo "X" >> input.txt
+          valgrind --leak-check=full --error-exitcode=1 ./compiler < input.txt
+
+  # 2. Camada de Orquestração (Go)
+  api-audit:
+    name: Orchestrator API (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      - name: Lint & Build Check
+        run: |
+          go fmt ./...
+          go build -o api_check .
+
+  # 3. Camada de Ingestão (Python)
+  etl-audit:
+    name: ETL Pipeline (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-sus-etl
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Format & Lint
+        run: |
+          pip install black isort
+          black .
+          isort .
+      - name: Auto-Commit Formatting
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format python code"
+
+  # 4. Camada de Interface (TypeScript)
+  frontend-audit:
+    name: Frontend (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-sus-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Build & Type Check
+        run: |
+          npm install
+          npm run build

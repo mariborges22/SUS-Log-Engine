@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -30,10 +29,12 @@ type Indicador struct {
 }
 
 var (
-	engineStdin  io.WriteCloser
-	engineStdout *bufio.Scanner
-	ufRegex      = regexp.MustCompile(`^[A-Z]{2}$`)
-	// Rate Limiting: 5 requisições por segundo para proteger hardware limitado (512MB)
+	engineStdin      io.WriteCloser
+	engineStdout     *bufio.Scanner
+	engineCmd        *exec.Cmd
+	engineMu         sync.Mutex
+	isEngineReady    bool
+	ufRegex          = regexp.MustCompile(`^[A-Z]{2}$`)
 	rateLimitChannel = make(chan struct{}, 5)
 )
 
@@ -49,26 +50,45 @@ func init() {
 	}()
 }
 
+// Supervisor de Processo: Garante que o motor C++ esteja rodando
+func startEngineSupervisor() {
+	for {
+		log.Println("Iniciando motor C++...")
+		initEngine()
+		loadFromDB()
+		isEngineReady = true
+
+		err := engineCmd.Wait()
+		isEngineReady = false
+		log.Printf("Motor C++ encerrou com erro: %v. Reiniciando em 5s...", err)
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func initEngine() {
-	cmd := exec.Command("./nexus-sus-engine/compiler")
+	engineMu.Lock()
+	defer engineMu.Unlock()
+
+	engineCmd = exec.Command("./nexus-sus-engine/compiler")
 	
 	var err error
-	engineStdin, err = cmd.StdinPipe()
+	engineStdin, err = engineCmd.StdinPipe()
 	if err != nil {
-		log.Fatal("Falha ao abrir stdin do engine:", err)
+		log.Printf("Erro ao abrir stdin: %v", err)
+		return
 	}
 
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := engineCmd.StdoutPipe()
 	if err != nil {
-		log.Fatal("Falha ao abrir stdout do engine:", err)
+		log.Printf("Erro ao abrir stdout: %v", err)
+		return
 	}
 	engineStdout = bufio.NewScanner(stdout)
 
-	if err := cmd.Start(); err != nil {
-		log.Fatal("Falha ao iniciar engine C++:", err)
+	if err := engineCmd.Start(); err != nil {
+		log.Printf("Erro ao iniciar motor: %v", err)
+		return
 	}
-
-	log.Println("Engine C++ iniciado e aguardando comandos.")
 }
 
 func loadFromDB() {
@@ -83,7 +103,6 @@ func loadFromDB() {
 	}
 	defer db.Close()
 
-	// SQLi Defense: Query parametrizada (padrão do lib/pq)
 	rows, err := db.Query("SELECT estado, regiao, valor_uf, valor_regiao, valor_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
 	if err != nil {
 		log.Println("Erro ao buscar indicadores:", err)
@@ -91,7 +110,6 @@ func loadFromDB() {
 	}
 	defer rows.Close()
 
-	var mu sync.Mutex
 	for rows.Next() {
 		var ind Indicador
 		if err := rows.Scan(&ind.Estado, &ind.Regiao, &ind.VlUF, &ind.VlRegiao, &ind.VlBrasil, &ind.DtCompetencia, &ind.DtAtualizacao); err != nil {
@@ -99,60 +117,73 @@ func loadFromDB() {
 			continue
 		}
 
-		// Sanitização rigorosa antes do pipe
 		safeUF := strings.ToUpper(strings.TrimSpace(ind.Estado))
 		if !ufRegex.MatchString(safeUF) {
 			continue 
 		}
 		safeRegiao := strings.ReplaceAll(strings.TrimSpace(ind.Regiao), " ", "_")
 
-		mu.Lock()
-		fmt.Fprintf(engineStdin, "L %s %s %.2f %.2f %.2f %s %s\n",
-			safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
-		mu.Unlock()
+		engineMu.Lock()
+		if engineStdin != nil {
+			fmt.Fprintf(engineStdin, "L %s %s %.2f %.2f %.2f %s %s\n",
+				safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+		}
+		engineMu.Unlock()
 	}
 	log.Println("Carga de dados no Engine C++ concluída.")
 }
 
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if isEngineReady {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status": "up", "engine": "ready"}`))
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"status": "down", "engine": "initializing_or_failed"}`))
+	}
+}
+
 func searchHandler(w http.ResponseWriter, r *http.Request) {
-	// CORS para o frontend TypeScript
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	
-	// Rate Limiting check
+	if !isEngineReady {
+		http.Error(w, `{"error": "Motor de busca temporariamente indisponível"}`, http.StatusServiceUnavailable)
+		return
+	}
+
 	select {
 	case <-rateLimitChannel:
-		// Permitido
 	default:
-		http.Error(w, "Muitas requisições. Tente novamente em breve.", http.StatusTooManyRequests)
+		http.Error(w, `{"error": "Rate limit exceeded"}`, http.StatusTooManyRequests)
 		return
 	}
 
 	uf := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("estado")))
-	
-	// Validação de Input (Prevenção de Buffer Overflow e Comando Injection no C++)
 	if !ufRegex.MatchString(uf) {
-		http.Error(w, "Estado inválido. Use 2 letras (ex: SP)", http.StatusBadRequest)
+		http.Error(w, `{"error": "Estado inválido"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Envia comando de Query ao C++ (Q <UF>)
+	engineMu.Lock()
+	defer engineMu.Unlock()
+
 	fmt.Fprintf(engineStdin, "Q %s\n", uf)
 
-	// Lê a resposta do C++
 	if engineStdout.Scan() {
 		resp := engineStdout.Text()
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(resp))
 	} else {
-		http.Error(w, "Erro ao ler resposta do motor de busca", http.StatusInternalServerError)
+		http.Error(w, `{"error": "Falha na comunicação com o motor"}`, http.StatusInternalServerError)
 	}
 }
 
 func main() {
-	initEngine()
-	loadFromDB()
+	go startEngineSupervisor()
 
 	http.HandleFunc("/api/search", searchHandler)
+	http.HandleFunc("/api/health", healthHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {
