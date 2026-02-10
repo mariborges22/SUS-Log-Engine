@@ -41,7 +41,7 @@ unsigned int hash_function(const char *key) {
 struct node *create_node(const char *estad, const char *reg, double v_uf,
                          double v_reg, double v_br, const char *competencia,
                          const char *atualizacao) {
-  struct node *new_node = (struct node *)malloc(sizeof(struct node));
+  struct node *new_node = new (std::nothrow) node;
 
   if (new_node == NULL) {
     fprintf(stderr, "{\"error\": \"Falha na alocacao de memoria\"}\n");
@@ -102,13 +102,13 @@ const struct node *search_node(const char *estado_key) {
 }
 
 // 4. Gestão de Memória (Higiene de hardware limitado 512MB)
-void cleanup_table() {
+void free_table() {
   for (int i = 0; i < TABLE_SIZE; i++) {
     struct node *current = hashTable[i];
     while (current != NULL) {
       struct node *temp = current;
       current = current->next;
-      free(temp);
+      delete temp;
     }
     hashTable[i] = NULL;
   }
@@ -152,6 +152,6 @@ int main() {
     }
   }
 
-  cleanup_table();
+  free_table();
   return 0;
 }
