@@ -88,9 +88,9 @@ void insert_node(const char *estado, const char *regiao, double vl_uf,
 }
 
 // Busca (O(1) médio com Separate Chaining)
-struct node *search_node(const char *estado_key) {
+const struct node *search_node(const char *estado_key) {
   unsigned int index = hash_function(estado_key);
-  struct node *current = hashTable[index];
+  const struct node *current = hashTable[index];
 
   while (current != NULL) {
     if (strcmp(current->estado, estado_key) == 0) {
@@ -126,15 +126,15 @@ int main() {
   // L <UF> <REGIAO> <V_UF> <V_REG> <V_BR> <COMPETENCIA> <ATUALIZACAO> (Load)
   // Q <UF> (Query)
   // X (Exit)
-  while (scanf("%s", command) != EOF) {
+  while (scanf("%9s", command) != EOF) {
     if (strcmp(command, "L") == 0) {
-      if (scanf("%s %s %lf %lf %lf %s %s", uf, regiao, &v_uf, &v_reg, &v_br,
-                comp, atual) == 7) {
+      if (scanf("%4s %49s %lf %lf %lf %19s %19s", uf, regiao, &v_uf, &v_reg,
+                &v_br, comp, atual) == 7) {
         insert_node(uf, regiao, v_uf, v_reg, v_br, comp, atual);
       }
     } else if (strcmp(command, "Q") == 0) {
-      if (scanf("%s", uf) == 1) {
-        struct node *res = search_node(uf);
+      if (scanf("%4s", uf) == 1) {
+        const struct node *res = search_node(uf);
         if (res != NULL) {
           printf("{\"status\": \"success\", \"data\": {\"estado\": \"%s\", "
                  "\"regiao\": \"%s\", \"vl_uf\": %.2f, \"vl_regiao\": %.2f, "
