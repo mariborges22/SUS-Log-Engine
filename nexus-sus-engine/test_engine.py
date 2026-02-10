@@ -6,14 +6,13 @@ import sys
 def run_test():
     print("=== Iniciando Validação DSA Independente (C++ Engine) ===")
     
-    # Inicia o processo
+    # Inicia o processo (Caminho corrigido para o Runner)
     process = subprocess.Popen(
         ['./compiler'],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        cwd='nexus-sus-engine'
+        text=True
     )
 
     # 1. Teste de Carga (Separate Chaining)
