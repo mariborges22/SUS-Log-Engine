@@ -76,8 +76,8 @@ void insert_node(const char *estado, const char *regiao, double vl_uf,
                  double vl_regiao, double vl_brasil, const char *dt_comp,
                  const char *dt_atual) {
   unsigned int index = hash_function(estado);
-  struct node *new_node =
-      create_node(estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_comp, dt_atual);
+  struct node *new_node = create_node(estado, regiao, vl_uf, vl_regiao,
+                                      vl_brasil, dt_comp, dt_atual);
 
   if (new_node == NULL)
     return;
@@ -155,5 +155,3 @@ int main() {
   cleanup_table();
   return 0;
 }
-
-
