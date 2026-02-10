@@ -3,53 +3,65 @@ name: Linting CI
 on:
   push:
     paths:
-      - 'engine/**'
+      - 'nexus-sus-engine/**'
       - 'api/**'
-      - 'etl/**'
+      - 'nexus-sus-etl/**'
   pull_request:
     paths:
-      - 'engine/**'
+      - 'nexus-sus-engine/**'
       - 'api/**'
-      - 'etl/**'
+      - 'nexus-sus-etl/**'
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   cpp-lint:
     name: C++ Lint (Engine)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Linting Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format cppcheck
+
       - name: Run Clang-Format
-        uses: docker://ghcr.io/cpp-linter/cpp-linter-action:v2
-        with:
-          style: 'file'
-          tidy-checks: ''
-          path: 'engine'
-  
+        run: |
+          find nexus-sus-engine/ -name "*.cpp" -o -name "*.h" | xargs clang-format --style=file --dry-run -Werror
+
+      - name: Run Cppcheck (Memory Hygiene)
+        run: |
+          cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem nexus-sus-engine/
+
   go-lint:
     name: Go Lint (API)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Gofmt
-        uses: docker://golang:1.21-bookworm
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          args: gofmt -l -w api/
+          go-version: '1.21'
+      - name: Run Gofmt
+        run: gofmt -l -d api/
 
   python-lint:
     name: Python Lint (ETL)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install black isort
       - name: Run Black
-        uses: docker://pyfound/black:latest_release
-        with:
-          args: black --check etl/
+        run: black --check nexus-sus-etl/
       - name: Run isort
-        uses: docker://python:3.11-slim
-        with:
-          args: sh -c "pip install isort && isort --check-only etl/"
+        run: isort --check-only nexus-sus-etl/
+
