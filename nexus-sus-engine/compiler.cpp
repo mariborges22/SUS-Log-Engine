@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <new>  
 
 // Definição do tamanho da tabela hash (número primo maior para produção)
 #define TABLE_SIZE 4999
