@@ -147,14 +147,14 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           # API & Engine
-          docker build -t $ECR_REGISTRY/nexus-sus-api-prod:latest ./api
-          docker push $ECR_REGISTRY/nexus-sus-api-prod:latest
+          docker build -t $ECR_REGISTRY/nexus-sus-api-:latest ./api
+          docker push $ECR_REGISTRY/nexus-sus-api-:latest
           
           # Frontend
-          docker build -t $ECR_REGISTRY/nexus-sus-frontend-prod:latest ./nexus-sus-frontend
-          docker push $ECR_REGISTRY/nexus-sus-frontend-prod:latest
+          docker build -t $ECR_REGISTRY/nexus-sus-frontend-:latest ./nexus-sus-frontend
+          docker push $ECR_REGISTRY/nexus-sus-frontend-:latest
 
       - name: Update ECS Services
         run: |
-          aws ecs update-service --cluster nexus-sus-cluster-prod --service nexus-sus-api-service --force-new-deployment
-          aws ecs update-service --cluster nexus-sus-cluster-prod --service nexus-sus-frontend-service --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster- --service nexus-sus-api-service --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster- --service nexus-sus-frontend-service --force-new-deployment
