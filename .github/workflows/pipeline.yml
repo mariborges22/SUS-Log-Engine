@@ -145,16 +145,19 @@ jobs:
       - name: Build, Tag and Push Images
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
         run: |
           # API & Engine
-          docker build -t $ECR_REGISTRY/nexus-sus-api:latest ./api
-          docker push $ECR_REGISTRY/nexus-sus-api-:latest
+          docker build -t $ECR_REGISTRY/nexus-sus-api-$ENV:latest ./api
+          docker push $ECR_REGISTRY/nexus-sus-api-$ENV:latest
           
           # Frontend
-          docker build -t $ECR_REGISTRY/nexus-sus-frontend:latest ./nexus-sus-frontend
-          docker push $ECR_REGISTRY/nexus-sus-frontend:latest
+          docker build -t $ECR_REGISTRY/nexus-sus-frontend-$ENV:latest ./nexus-sus-frontend
+          docker push $ECR_REGISTRY/nexus-sus-frontend-$ENV:latest
 
       - name: Update ECS Services
+        env:
+          ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
         run: |
-          aws ecs update-service --cluster nexus-sus-cluster- --service nexus-sus-api-service --force-new-deployment
-          aws ecs update-service --cluster nexus-sus-cluster- --service nexus-sus-frontend-service --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-api-service --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-frontend-service --force-new-deployment
