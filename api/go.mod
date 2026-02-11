@@ -1,4 +1,4 @@
-module github.com/seu-usuario/SUS-Log-Engine/nexus-sus-api
+module github.com/mariborges22/SUS-Log-Engine/nexus-sus-api
 
 go 1.21
 
