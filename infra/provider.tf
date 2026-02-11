@@ -8,13 +8,13 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket         = "nexus-sus-terraform-state"
-    # A 'key' será configurada dinamicamente via -backend-config na pipeline
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "nexus-sus-terraform-locks"
-  }
+  # backend "s3" {
+  #   bucket         = "nexus-sus-terraform-state"
+  #   # A 'key' será configurada dinamicamente via -backend-config na pipeline
+  #   region         = "us-east-1"
+  #   encrypt        = true
+  #   dynamodb_table = "nexus-sus-terraform-locks"
+  # }
 }
 
 provider "aws" {
