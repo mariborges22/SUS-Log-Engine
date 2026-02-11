@@ -50,6 +50,22 @@ resource "aws_lb_listener" "frontend" {
   }
 }
 
+resource "aws_lb_listener_rule" "api" {
+  listener_arn = aws_lb_listener.frontend.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api*"]
+    }
+  }
+}
+
 # Security Group for ALB
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg-${var.environment}"

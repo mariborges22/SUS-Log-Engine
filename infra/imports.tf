@@ -42,3 +42,9 @@ import {
   to = aws_iam_policy.ecs_logging
   id = "arn:aws:iam::629614691528:policy/nexus-sus-ecs-logging-policy-staging"
 }
+
+# 4. Lambda Functions
+import {
+  to = aws_lambda_function.etl
+  id = "nexus-sus-etl-staging"
+}
