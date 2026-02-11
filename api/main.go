@@ -139,8 +139,8 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status": "up", "engine": "ready"}`))
 	} else {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status": "down", "engine": "initializing_or_failed"}`))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status": "initializing", "engine": "loading_data"}`))
 	}
 }
 

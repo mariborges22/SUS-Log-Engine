@@ -35,7 +35,7 @@ resource "aws_lb_target_group" "api" {
   health_check {
     path                = "/api/health"
     port                = "traffic-port"
-    matcher             = "200,503"
+    matcher             = "200-399"
     interval            = 30
     timeout             = 10
     healthy_threshold   = 2
