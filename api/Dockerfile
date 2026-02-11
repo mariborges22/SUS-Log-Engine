@@ -1,10 +1,9 @@
 # Estágio 1: Build da API Go
 FROM golang:1.21-bookworm AS go-builder
 WORKDIR /app
-COPY api/go.mod ./
-# Removemos a cópia do go.sum aqui para que o download/tidy gere um novo
-RUN go mod tidy
+COPY api/go.mod api/go.sum ./
 COPY api/ .
+RUN go mod tidy
 RUN go build -o main .
 
 # Estágio 2: Build do Motor C++
