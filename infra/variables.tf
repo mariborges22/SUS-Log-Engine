@@ -1,127 +1,72 @@
-# ==============================================================================
-# NEXUS-SUS TERRAFORM VARIABLES
-# Infraestrutura AWS para o ecossistema de processamento de alta performance
-# ==============================================================================
-
 variable "aws_region" {
-  description = "Região AWS para deploy da infraestrutura"
+  description = "AWS region"
   type        = string
   default     = "us-east-1"
 }
 
 variable "project_name" {
-  description = "Nome do projeto para tagueamento de recursos"
+  description = "Name of the project"
   type        = string
   default     = "nexus-sus"
 }
 
 variable "environment" {
-  description = "Ambiente de deploy (dev, staging, prod)"
+  description = "Environment (prod/staging)"
   type        = string
   default     = "prod"
 }
 
-# ==============================================================================
-# DATABASE CONFIGURATION
-# ==============================================================================
-
-variable "db_instance_class" {
-  description = "Classe da instância RDS"
-  type        = string
-  default     = "db.t3.micro"
-}
-
-variable "db_name" {
-  description = "Nome do banco de dados PostgreSQL"
-  type        = string
-  default     = "nexus_sus_db"
-}
-
-variable "db_username" {
-  description = "Username do administrador do banco"
-  type        = string
-  default     = "nexus_admin"
-  sensitive   = true
-}
-
-variable "admin_password" {
-  description = "Senha do administrador do banco (injetada via GitHub Actions)"
-  type        = string
-  sensitive   = true
-}
-
-variable "db_allocated_storage" {
-  description = "Armazenamento alocado para RDS em GB"
-  type        = number
-  default     = 20
-}
-
-variable "db_max_allocated_storage" {
-  description = "Armazenamento máximo para autoscaling do RDS em GB"
-  type        = number
-  default     = 100
-}
-
-# ==============================================================================
-# NETWORK CONFIGURATION
-# ==============================================================================
-
 variable "vpc_cidr" {
-  description = "CIDR block para a VPC"
+  description = "CIDR block for VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
 variable "public_subnet_cidrs" {
-  description = "CIDR blocks para subnets públicas"
+  description = "Public subnet CIDRs"
   type        = list(string)
   default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
 variable "private_subnet_cidrs" {
-  description = "CIDR blocks para subnets privadas (RDS)"
+  description = "Private subnet CIDRs"
   type        = list(string)
   default     = ["10.0.10.0/24", "10.0.11.0/24"]
 }
 
-# ==============================================================================
-# ECR CONFIGURATION
-# ==============================================================================
-
-variable "ecr_repositories" {
-  description = "Lista de repositórios ECR para as imagens Debian Slim"
-  type        = list(string)
-  default = [
-    "nexus-sus-engine",
-    "nexus-sus-api",
-    "nexus-sus-etl",
-    "nexus-sus-frontend"
-  ]
-}
-
-variable "ecr_image_tag_mutability" {
-  description = "Mutabilidade das tags de imagem (MUTABLE ou IMMUTABLE)"
+variable "db_name" {
+  description = "RDS database name"
   type        = string
-  default     = "MUTABLE"
+  default     = "nexus_sus_db"
 }
 
-variable "ecr_scan_on_push" {
-  description = "Habilitar scan de vulnerabilidades no push"
-  type        = bool
-  default     = true
+variable "db_username" {
+  description = "Database administrator username"
+  type        = string
+  sensitive   = true
 }
 
-# ==============================================================================
-# TAGS
-# ==============================================================================
+variable "admin_password" {
+  description = "Database administrator password"
+  type        = string
+  sensitive   = true
+}
 
 variable "common_tags" {
-  description = "Tags comuns aplicadas a todos os recursos"
+  description = "Common tags for all resources"
   type        = map(string)
-  default = {
+  default     = {
     Project     = "Nexus-SUS"
-    ManagedBy   = "Terraform"
-    Repository  = "SUS-Log-Engine"
-    Performance = "High-Performance-O1-OLogN"
+    Owner       = "Senior Architecture Team"
   }
+}
+
+variable "ecr_repositories" {
+  description = "List of ECR repo names"
+  type        = list(string)
+  default     = ["nexus-sus-api", "nexus-sus-frontend"]
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
 }
