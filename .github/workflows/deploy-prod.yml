@@ -71,3 +71,8 @@ jobs:
           TF_VAR_db_username: nexus_admin
           TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
         run: terraform apply -auto-approve tfplan
+
+      - name: Update ECS Services
+        run: |
+          aws ecs update-service --cluster nexus-sus-cluster-prod --service nexus-sus-api-service-prod --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster-prod --service nexus-sus-frontend-service-prod --force-new-deployment

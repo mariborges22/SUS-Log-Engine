@@ -161,5 +161,5 @@ jobs:
         env:
           ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
         run: |
-          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-api-service --force-new-deployment
-          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-frontend-service --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-api-service-$ENV --force-new-deployment
+          aws ecs update-service --cluster nexus-sus-cluster-$ENV --service nexus-sus-frontend-service-$ENV --force-new-deployment
