@@ -131,7 +131,7 @@ jobs:
         run: |
           terraform init -reconfigure \
             -backend-config="key=${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}/terraform.tfstate"
-          terraform apply -target=aws_dynamodb_table.terraform_locks -auto-approve
+          terraform apply -auto-approve
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
