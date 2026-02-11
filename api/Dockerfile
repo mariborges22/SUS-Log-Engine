@@ -1,16 +1,26 @@
 # Estágio 1: Build da API Go
-FROM golang:1.21-bookworm AS builder
-
+FROM golang:1.21-bookworm AS go-builder
 WORKDIR /app
-COPY . .
-RUN go mod tidy
+COPY api/go.mod api/go.sum ./
+RUN go mod download
+COPY api/ .
 RUN go build -o main .
 
-# Estágio 2: Runtime
-FROM debian:bookworm-slim
-
+# Estágio 2: Build do Motor C++
+FROM debian:bookworm AS cpp-builder
+RUN apt-get update && apt-get install -y g++
 WORKDIR /app
-COPY --from=builder /app/main .
+COPY nexus-sus-engine/ .
+RUN g++ -O3 compiler.cpp -o compiler
+
+# Estágio 3: Runtime
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y libstdc++6 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+# Copia os binários mantendo a estrutura esperada pelo main.go
+COPY --from=go-builder /app/main .
+COPY --from=cpp-builder /app/compiler ./nexus-sus-engine/compiler
 
 EXPOSE 8080
 CMD ["./main"]

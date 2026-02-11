@@ -58,7 +58,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           # Build API/Engine with C++ -O3 (handled inside API Dockerfile/Build context)
-          docker build -t $ECR_REGISTRY/nexus-sus-api-prod:latest ./api
+          docker build -t $ECR_REGISTRY/nexus-sus-api-prod:latest -f api/Dockerfile .
           docker push $ECR_REGISTRY/nexus-sus-api-prod:latest
           
           # Build Frontend

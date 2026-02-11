@@ -33,8 +33,13 @@ resource "aws_lb_target_group" "api" {
   target_type = "ip"
 
   health_check {
-    path = "/api/health"
-    port = "traffic-port"
+    path                = "/api/health"
+    port                = "traffic-port"
+    matcher             = "200,503"
+    interval            = 30
+    timeout             = 10
+    healthy_threshold   = 2
+    unhealthy_threshold = 10
   }
 }
 

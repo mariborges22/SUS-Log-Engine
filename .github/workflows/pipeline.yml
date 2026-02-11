@@ -150,7 +150,7 @@ jobs:
           ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
         run: |
           # API & Engine
-          docker build -t $ECR_REGISTRY/nexus-sus-api-$ENV:latest ./api
+          docker build -t $ECR_REGISTRY/nexus-sus-api-$ENV:latest -f api/Dockerfile .
           docker push $ECR_REGISTRY/nexus-sus-api-$ENV:latest
           
           # Frontend

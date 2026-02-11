@@ -29,6 +29,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_NAME", value = aws_db_instance.postgres.db_name },
         { name = "DB_USER", value = var.db_username },
         { name = "DB_PASSWORD", value = var.admin_password },
+        { name = "DB_PORT", value = "5432" },
         { name = "PORT", value = "8080" }
       ]
       logConfiguration = {
