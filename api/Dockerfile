@@ -2,9 +2,8 @@
 FROM golang:1.21-bookworm AS builder
 
 WORKDIR /app
-COPY go.mod ./
-RUN go mod tidy
 COPY . .
+RUN go mod tidy
 RUN go build -o main .
 
 # Estágio 2: Runtime
