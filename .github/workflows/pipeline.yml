@@ -129,7 +129,8 @@ jobs:
           TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
         run: |
-          terraform init
+          terraform init -reconfigure \
+            -backend-config="key=${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}/terraform.tfstate"
           terraform apply -auto-approve
 
       - name: Configure AWS Credentials

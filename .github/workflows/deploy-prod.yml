@@ -26,7 +26,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra
-        run: terraform init
+        run: terraform init -reconfigure -backend-config="key=prod/terraform.tfstate"
 
       - name: Terraform Plan
         working-directory: infra
