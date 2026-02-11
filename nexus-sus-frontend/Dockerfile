@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # Estágio 2: Servidor Web (Nginx leve baseado em Debian)
-FROM nginx:stable-bookworm-slim
+FROM nginx:stable
 
 # Remove a configuração padrão do Nginx
 RUN rm /etc/nginx/conf.d/default.conf
