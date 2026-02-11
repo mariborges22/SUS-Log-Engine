@@ -3,7 +3,7 @@
 # ==============================================================================
 
 resource "aws_s3_bucket" "data_lake" {
-  bucket = "nexus-sus-data-lake"
+  bucket = "nexus-sus-data-lake-${var.environment}"
 
   tags = {
     Name        = "nexus-sus-data-lake"
@@ -65,7 +65,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
 # ==============================================================================
 
 resource "aws_iam_role" "etl_role" {
-  name = "${var.project_name}-etl-role"
+  name = "${var.project_name}-etl-role-${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -90,7 +90,7 @@ resource "aws_iam_role" "etl_role" {
 }
 
 resource "aws_iam_policy" "etl_s3_read" {
-  name        = "${var.project_name}-etl-s3-read-policy"
+  name        = "${var.project_name}-etl-s3-read-policy-${var.environment}"
   description = "Permite ao módulo ETL Python ler do bucket S3 Data Lake"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -119,7 +119,7 @@ resource "aws_iam_policy" "etl_s3_read" {
 }
 
 resource "aws_iam_policy" "etl_s3_write" {
-  name        = "${var.project_name}-etl-s3-write-policy"
+  name        = "${var.project_name}-etl-s3-write-policy-${var.environment}"
   description = "Permite ao módulo ETL Python escrever dados processados no S3"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -139,7 +139,7 @@ resource "aws_iam_policy" "etl_s3_write" {
 }
 
 resource "aws_iam_policy" "etl_ecr_access" {
-  name        = "${var.project_name}-etl-ecr-access-policy"
+  name        = "${var.project_name}-etl-ecr-access-policy-${var.environment}"
   description = "Permite ao módulo ETL Python fazer pull de imagens do ECR"
   policy = jsonencode({
     Version = "2012-10-17"
