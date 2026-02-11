@@ -130,6 +130,25 @@ output "rds_security_group_id" {
 }
 
 # ==============================================================================
+# ECS CLUSTER & SERVICES
+# ==============================================================================
+
+output "ecs_cluster_name" {
+  description = "Nome do Cluster ECS"
+  value       = aws_ecs_cluster.main.name
+}
+
+output "ecs_service_api_name" {
+  description = "Nome do Serviço ECS para a API"
+  value       = aws_ecs_service.api.name
+}
+
+output "ecs_service_frontend_name" {
+  description = "Nome do Serviço ECS para o Frontend"
+  value       = aws_ecs_service.frontend.name
+}
+
+# ==============================================================================
 # GITHUB ACTIONS ENVIRONMENT VARIABLES
 # Bloco formatado para copiar direto no workflow
 # ==============================================================================

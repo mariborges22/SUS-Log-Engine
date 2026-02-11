@@ -133,17 +133,9 @@ resource "aws_security_group" "frontend" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTPS from anywhere"
-    from_port   = 443
-    to_port     = 443
+    description = "Frontend on port 3000"
+    from_port   = 3000
+    to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -167,19 +159,11 @@ resource "aws_security_group" "api" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "API access from Frontend"
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.frontend.id]
-  }
-
-  ingress {
-    description = "API access from VPC"
+    description = "API access from anywhere (Hardened via Security Expert commands)"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = ["0.0.0.0/0"] # Restrito via AWS CLI pós-deploy conforme solicitado
   }
 
   egress {
