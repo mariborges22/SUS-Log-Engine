@@ -64,7 +64,7 @@ variable "common_tags" {
 variable "ecr_repositories" {
   description = "List of ECR repo names"
   type        = list(string)
-  default     = ["nexus-sus-api", "nexus-sus-frontend"]
+  default     = ["nexus-sus-api", "nexus-sus-frontend", "nexus-sus-engine", "nexus-sus-etl"]
 }
 
 data "aws_availability_zones" "available" {
