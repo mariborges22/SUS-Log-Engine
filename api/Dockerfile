@@ -18,9 +18,15 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y libstdc++6 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
+# Cria a estrutura de pastas necessária para o path relativo do Go
+RUN mkdir -p nexus-sus-engine
+
 # Copia os binários mantendo a estrutura esperada pelo main.go
 COPY --from=go-builder /app/main .
 COPY --from=cpp-builder /app/compiler ./nexus-sus-engine/compiler
+
+# Garante permissão de execução
+RUN chmod +x ./main ./nexus-sus-engine/compiler
 
 EXPOSE 8080
 CMD ["./main"]
