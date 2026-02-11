@@ -17,7 +17,7 @@ resource "aws_db_instance" "postgres" {
   skip_final_snapshot  = true
   publicly_accessible  = false
 
-  backup_retention_period = 7
+  backup_retention_period = 1
 }
 
 resource "aws_db_subnet_group" "main" {
