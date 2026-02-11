@@ -128,10 +128,22 @@ jobs:
           TF_VAR_db_username: nexus_admin
           TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
-          STATE_KEY: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}/terraform.tfstate
         run: |
-          terraform init -reconfigure -backend-config="key=$STATE_KEY"
-          terraform apply -auto-approve
+          STATE_KEY="${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}/terraform.tfstate"
+          
+          # Limpa lock travado (se existir)
+          aws dynamodb delete-item \
+            --table-name nexus-sus-terraform-locks \
+            --key "{\"LockID\":{\"S\":\"nexus-sus-terraform-state/${STATE_KEY}\"}}" \
+            2>/dev/null || true
+          
+          terraform init -reconfigure \
+            -backend-config="key=${STATE_KEY}" \
+            -backend-config="bucket=nexus-sus-terraform-state"
+          
+          # Só cria a DynamoDB table pra locks (não toca no resto)
+          terraform plan -out=tfplan -target="aws_dynamodb_table.terraform_locks"
+          terraform apply tfplan
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
