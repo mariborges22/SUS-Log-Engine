@@ -1,9 +1,9 @@
 terraform {
   backend "s3" {
     bucket         = "nexus-sus-terraform-state"
-    key            = "terraform.tfstate" # Valor default, será sobrescrito via -backend-config
+    key            = "terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
-    dynamodb_table = "nexus-sus-terraform-locks"
+    dynamodb_table = "terraform-locks"  # ← Muda aqui
   }
 }
