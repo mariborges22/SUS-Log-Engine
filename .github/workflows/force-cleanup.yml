@@ -123,40 +123,42 @@ jobs:
           for v_id in $current_vpcs; do
             echo "🔥 Destruindo VPC: $v_id"
             
-            # 6.1 Load Balancers (Podem prender ENIs e Subnets)
+            # 6.1 VPC Endpoints (INTERFACE e GATEWAY)
+            echo "   ⏳ Verificando VPC Endpoints..."
+            endpoints=$(aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=$v_id" --query 'VpcEndpoints[*].VpcEndpointId' --output text 2>/dev/null)
+            for vpce in $endpoints; do
+              echo "   🗑️ Deletando VPC Endpoint: $vpce"
+              aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$vpce" 2>/dev/null
+            done
+            if [[ -n "$endpoints" ]]; then sleep 15; fi
+
+            # 6.2 Load Balancers
             echo "   ⏳ Verificando Load Balancers..."
             elbs=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?VpcId=='$v_id'].LoadBalancerArn" --output text 2>/dev/null)
             for elb in $elbs; do
               echo "   🗑️ Deletando ELB: $elb"
               aws elbv2 delete-load-balancer --load-balancer-arn "$elb" 2>/dev/null
             done
-            if [[ -n "$elbs" ]]; then
-               echo "   🕒 Aguardando ELBs serem deletados (30s)..."
-               sleep 30
-            fi
+            if [[ -n "$elbs" ]]; then sleep 30; fi
 
-            # 6.2 NAT Gateways (Crucial para deletar subnets)
+            # 6.3 NAT Gateways
             echo "   ⏳ Verificando NAT Gateways..."
             nat_gws=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$v_id" --query "NatGateways[?State!='deleted'].NatGatewayId" --output text 2>/dev/null)
             for nat in $nat_gws; do
               echo "   🗑️ Deletando NAT Gateway: $nat"
               aws ec2 delete-nat-gateway --nat-gateway-id "$nat" 2>/dev/null
             done
-            
-            if [[ -n "$nat_gws" ]]; then
-              echo "   🕒 Aguardando NAT Gateways serem deletados (60s)..."
-              sleep 60
-            fi
+            if [[ -n "$nat_gws" ]]; then sleep 60; fi
 
-            # 6.3 Security Groups (menos o default)
+            # 6.4 Security Groups (menos o default)
             echo "   🗑️ Limpando Security Groups..."
             sgs=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$v_id" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
             for sg in $sgs; do
                aws ec2 delete-security-group --group-id "$sg" 2>/dev/null && echo "   ✅ SG $sg removido"
             done
 
-            # 6.4 Interfaces de Rede (ENIs órfãs)
-            echo "   🗑️ Limpando Interfaces de Rede (ENIs)..."
+            # 6.5 ENIs (Interfaces de Rede)
+            echo "   🗑️ Limpando interfaces de Rede (ENIs)..."
             enis=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$v_id" --query 'NetworkInterfaces[*].NetworkInterfaceId' --output text)
             for eni in $enis; do
               att_id=$(aws ec2 describe-network-interfaces --network-interface-ids "$eni" --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text 2>/dev/null)
@@ -166,7 +168,7 @@ jobs:
               aws ec2 delete-network-interface --network-interface-id "$eni" 2>/dev/null && echo "   ✅ ENI $eni removida"
             done
 
-            # 6.5 Internet Gateways
+            # 6.6 Internet Gateways
             echo "   🗑️ Limpando Internet Gateways..."
             igws=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$v_id" --query 'InternetGateways[*].InternetGatewayId' --output text)
             for ig_id in $igws; do
@@ -174,14 +176,16 @@ jobs:
               aws ec2 delete-internet-gateway --internet-gateway-id "$ig_id" 2>/dev/null && echo "   ✅ IGW $ig_id removido"
             done
 
-            # 6.6 Subnets
+            # 6.7 Subnets (Mostrando Erros!)
             echo "   🗑️ Limpando Subnets..."
             subs=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$v_id" --query 'Subnets[*].SubnetId' --output text)
             for s_id in $subs; do
-              aws ec2 delete-subnet --subnet-id "$s_id" 2>/dev/null && echo "   ✅ Subnet $s_id removida"
+              echo "   Excluindo Subnet: $s_id"
+              aws ec2 delete-subnet --subnet-id "$s_id" && echo "      ✅ Sucesso" || echo "      ❌ Erro ao deletar subnet. Provável dependência oculta."
             done
 
-            # 6.7 VPC finalize
-            echo "   💣 Finalizando exclusão da VPC..."
-            aws ec2 delete-vpc --vpc-id "$v_id" 2>/dev/null && echo "   ⭐ VPC $v_id Removida com sucesso!" || echo "   ⚠️ Erro residual ao remover VPC $v_id. Tente rodar o cleanup novamente em 2 minutos."
+            # 6.8 VPC finalize
+            echo "   💣 Finalizando exclusão da VPC: $v_id"
+            aws ec2 delete-vpc --vpc-id "$v_id" && echo "   ⭐ VPC $v_id Removida com sucesso!" || echo "   ⚠️ Erro residual ao remover VPC $v_id. Tente novamente em 2 minutos."
           done
+          echo "✨ Limpeza concluída!"
