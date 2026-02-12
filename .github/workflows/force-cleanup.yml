@@ -31,6 +31,65 @@ jobs:
         run: |
           echo "🚀 Iniciando limpeza de recursos órfãos..."
 
+          # Funções auxiliares com variáveis locais para evitar colisões
+          delete_ecr() {
+            local rname=$1
+            echo "🗑️ Verificando ECR: $rname"
+            aws ecr delete-repository --repository-name "$rname" --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
+          }
+
+          delete_rds_subnet() {
+            local sname=$1
+            echo "🗑️ Verificando RDS Subnet Group: $sname"
+            aws rds delete-db-subnet-group --db-subnet-group-name "$sname" 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
+          }
+
+          delete_rds_param() {
+            local pname=$1
+            echo "🗑️ Verificando RDS Param Group: $pname"
+            aws rds delete-db-parameter-group --db-parameter-group-name "$pname" 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
+          }
+
+          delete_s3() {
+            local bname=$1
+            echo "🗑️ Verificando S3 Bucket: $bname"
+            aws s3 rm "s3://$bname" --recursive 2>/dev/null || true
+            aws s3 rb "s3://$bname" --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
+          }
+
+          delete_iam_role() {
+            local rname=$1
+            echo "🗑️ Verificando IAM Role: $rname"
+            local attached_policies=$(aws iam list-attached-role-policies --role-name "$rname" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || true)
+            for policy in $attached_policies; do
+              aws iam detach-role-policy --role-name "$rname" --policy-arn "$policy" 2>/dev/null || true
+            done
+            aws iam delete-role --role-name "$rname" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Não encontrada"
+          }
+
+          detach_and_delete_policy() {
+            local pname=$1
+            echo "🗑️ Verificando Policy: $pname"
+            local arn=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='$pname'].Arn" --output text 2>/dev/null)
+            if [[ -n "$arn" && "$arn" != "None" ]]; then
+              # Detach de todas as roles associadas
+              local roles=$(aws iam list-entities-for-policy --policy-arn "$arn" --entity-filter Role --query 'PolicyRoles[*].RoleName' --output text 2>/dev/null)
+              for r in $roles; do
+                aws iam detach-role-policy --role-name "$r" --policy-arn "$arn" 2>/dev/null
+              done
+              aws iam delete-policy --policy-arn "$arn" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Erro ao deletar"
+            else
+              echo "   ⚠️ Não encontrada"
+            fi
+          }
+
+          # 1. ECR Repos (Discovery)
+          echo "📦 Limpando ECR (Discovery)..."
+          all_repos=$(aws ecr describe-repositories --query "repositories[?starts_with(repositoryName, 'nexus-sus')].repositoryName" --output text 2>/dev/null)
+          for repo in $all_repos; do
+            delete_ecr "$repo"
+          done
+
           # 2. RDS Groups e Instâncias (Discovery)
           echo "🗄️ Limpando RDS (Discovery)..."
           # Deleta TODAS as instâncias que começam com nexus-sus
