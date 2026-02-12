@@ -80,6 +80,13 @@ jobs:
           echo "Scanning infrastructure for security vulnerabilities..."
           echo "No critical vulnerabilities found. [Production-Grade Validated]"
 
+      - name: Terraform Apply
+        working-directory: infra
+        env:
+          TF_VAR_db_username: nexus_admin
+          TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
+        run: terraform apply -auto-approve tfplan
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -95,13 +102,6 @@ jobs:
           # Build Frontend
           docker build -t $ECR_REGISTRY/nexus-sus-frontend-prod:latest ./nexus-sus-frontend
           docker push $ECR_REGISTRY/nexus-sus-frontend-prod:latest
-
-      - name: Terraform Apply
-        working-directory: infra
-        env:
-          TF_VAR_db_username: nexus_admin
-          TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
-        run: terraform apply -auto-approve tfplan
 
       - name: Update ECS Services
         run: |
