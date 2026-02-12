@@ -31,103 +31,117 @@ jobs:
         run: |
           echo "🚀 Iniciando limpeza de recursos órfãos..."
 
-          # Funções auxiliares para não falhar o script se o recurso não existir
+          # Funções auxiliares com variáveis locais para evitar colisões
           delete_ecr() {
-            repo=$1
-            echo "🗑️ Verificando ECR: $repo"
-            aws ecr delete-repository --repository-name $repo --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+            local rname=$1
+            echo "🗑️ Verificando ECR: $rname"
+            aws ecr delete-repository --repository-name "$rname" --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
           }
 
           delete_rds_subnet() {
-            name=$1
-            echo "🗑️ Verificando RDS Subnet Group: $name"
-            aws rds delete-db-subnet-group --db-subnet-group-name $name 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+            local sname=$1
+            echo "🗑️ Verificando RDS Subnet Group: $sname"
+            aws rds delete-db-subnet-group --db-subnet-group-name "$sname" 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
           }
 
           delete_rds_param() {
-            name=$1
-            echo "🗑️ Verificando RDS Param Group: $name"
-            aws rds delete-db-parameter-group --db-parameter-group-name $name 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+            local pname=$1
+            echo "🗑️ Verificando RDS Param Group: $pname"
+            aws rds delete-db-parameter-group --db-parameter-group-name "$pname" 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
           }
 
           delete_s3() {
-            bucket=$1
-            echo "🗑️ Verificando S3 Bucket: $bucket"
-            aws s3 rm s3://$bucket --recursive 2>/dev/null || true
-            aws s3 rb s3://$bucket --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+            local bname=$1
+            echo "🗑️ Verificando S3 Bucket: $bname"
+            aws s3 rm "s3://$bname" --recursive 2>/dev/null || true
+            aws s3 rb "s3://$bname" --force 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado"
           }
 
           delete_iam_role() {
-            role=$1
-            echo "🗑️ Verificando IAM Role: $role"
-            policies=$(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || true)
-            for policy in $policies; do
-              aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null || true
+            local rname=$1
+            echo "🗑️ Verificando IAM Role: $rname"
+            local attached_policies=$(aws iam list-attached-role-policies --role-name "$rname" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || true)
+            for policy in $attached_policies; do
+              aws iam detach-role-policy --role-name "$rname" --policy-arn "$policy" 2>/dev/null || true
             done
-            aws iam delete-role --role-name $role 2>/dev/null && echo "   ✅ Deletado" || echo "   ⚠️ Não encontrado ou erro"
+            aws iam delete-role --role-name "$rname" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Não encontrada"
           }
 
-          # 1. Limpar ECR Repos (staging e prod)
+          detach_and_delete_policy() {
+            local pname=$1
+            echo "🗑️ Verificando Policy: $pname"
+            local arn=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='$pname'].Arn" --output text 2>/dev/null)
+            if [[ -n "$arn" && "$arn" != "None" ]]; then
+              # Detach de todas as roles associadas
+              local roles=$(aws iam list-entities-for-policy --policy-arn "$arn" --entity-filter Role --query 'PolicyRoles[*].RoleName' --output text 2>/dev/null)
+              for r in $roles; do
+                aws iam detach-role-policy --role-name "$r" --policy-arn "$arn" 2>/dev/null
+              done
+              aws iam delete-policy --policy-arn "$arn" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Erro ao deletar"
+            else
+              echo "   ⚠️ Não encontrada"
+            fi
+          }
+
+          # 1. ECR Repos
           echo "📦 Limpando ECR Repositories..."
-          repos=("nexus-sus-etl" "nexus-sus-frontend" "nexus-sus-engine" "nexus-sus-api")
-          for repo in "${repos[@]}"; do
-            delete_ecr "$repo-staging"
-            delete_ecr "$repo-prod"
+          for itm in "nexus-sus-etl" "nexus-sus-frontend" "nexus-sus-engine" "nexus-sus-api"; do
+            delete_ecr "$itm-staging"
+            delete_ecr "$itm-prod"
           done
 
-          # 2. Limpar RDS
+          # 2. RDS Groups
           echo "🗄️ Limpando RDS Groups..."
-          for env in "staging" "prod"; do
-            delete_rds_subnet "nexus-sus-db-subnet-group-$env"
-            delete_rds_param "nexus-sus-postgres-params-$env"
+          for env_name in "staging" "prod"; do
+            delete_rds_subnet "nexus-sus-db-subnet-group-$env_name"
+            delete_rds_param "nexus-sus-postgres-params-$env_name"
           done
 
-          # 3. Limpar S3
+          # 3. S3
           echo "🪣 Limpando S3..."
           delete_s3 "nexus-sus-data-lake-staging"
           delete_s3 "nexus-sus-data-lake-prod"
 
-          # 4. Limpar IAM
+          # 4. IAM Roles
           echo "🔑 Limpando IAM Roles..."
-          roles=("nexus-sus-etl-role" "nexus-sus-ecs-task-execution-role" "nexus-sus-ecs-task-role")
-          for role in "${roles[@]}"; do
-            delete_iam_role "$role-staging"
-            delete_iam_role "$role-prod"
+          for rl in "nexus-sus-etl-role" "nexus-sus-ecs-task-execution-role" "nexus-sus-ecs-task-role"; do
+            delete_iam_role "$rl-staging"
+            delete_iam_role "$rl-prod"
           done
           
-          # 5. Limpar Policies
+          # 5. IAM Policies
           echo "📜 Limpando Policies..."
-          policies=(
-            "nexus-sus-etl-s3-read-policy" "nexus-sus-etl-s3-write-policy" "nexus-sus-etl-ecr-access-policy"
-            "nexus-sus-ecs-logging-policy"
-          )
-          for policy_name in "${policies[@]}"; do
-            for env in "staging" "prod"; do
-              pname="$policy_name-$env"
-              echo "🗑️ Verificando Policy: $pname"
-              arn=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='$pname'].Arn" --output text 2>/dev/null)
-              if [[ -n "$arn" && "$arn" != "None" ]]; then
-                aws iam delete-policy --policy-arn "$arn" 2>/dev/null && echo "   ✅ Deletada" || echo "   ⚠️ Erro ao deletar"
-              fi
+          for pbase in "nexus-sus-etl-s3-read-policy" "nexus-sus-etl-s3-write-policy" "nexus-sus-etl-ecr-access-policy" "nexus-sus-ecs-logging-policy"; do
+            for env_name in "staging" "prod"; do
+              detach_and_delete_policy "$pbase-$env_name"
             done
           done
 
-          # 6. Limpar VPCs e Dependências (CUIDADO!)
+          # 6. VPCs e Redes (Melhorado)
           echo "🌐 Limpando VPCs e Redes Órfãs..."
-          vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc*" --query 'Vpcs[*].VpcId' --output text)
-          for vpc in $vpcs; do
-            echo "🔥 Destruindo VPC: $vpc"
+          current_vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc*" --query 'Vpcs[*].VpcId' --output text)
+          for v_id in $current_vpcs; do
+            echo "🔥 Destruindo VPC: $v_id"
+            
+            # Security Groups (menos o default)
+            sgs=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$v_id" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
+            for sg in $sgs; do
+               aws ec2 delete-security-group --group-id "$sg" 2>/dev/null && echo "   ✅ SG $sg removido"
+            done
+
             # IGWs
-            igws=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$vpc" --query 'InternetGateways[*].InternetGatewayId' --output text)
-            for igw in $igws; do
-              aws ec2 detach-internet-gateway --internet-gateway-id $igw --vpc-id $vpc 2>/dev/null
-              aws ec2 delete-internet-gateway --internet-gateway-id $igw 2>/dev/null
+            igws=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$v_id" --query 'InternetGateways[*].InternetGatewayId' --output text)
+            for ig_id in $igws; do
+              aws ec2 detach-internet-gateway --internet-gateway-id "$ig_id" --vpc-id "$v_id" 2>/dev/null
+              aws ec2 delete-internet-gateway --internet-gateway-id "$ig_id" 2>/dev/null && echo "   ✅ IGW $ig_id removido"
             done
+
             # Subnets
-            subnets=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc" --query 'Subnets[*].SubnetId' --output text)
-            for sub in $subnets; do
-              aws ec2 delete-subnet --subnet-id $sub 2>/dev/null
+            subs=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$v_id" --query 'Subnets[*].SubnetId' --output text)
+            for s_id in $subs; do
+              aws ec2 delete-subnet --subnet-id "$s_id" 2>/dev/null && echo "   ✅ Subnet $s_id removida"
             done
-            # VPC
-            aws ec2 delete-vpc --vpc-id $vpc 2>/dev/null && echo "   ✅ VPC Removida" || echo "   ⚠️ Erro (check dependencies)"
+
+            # VPC finalize
+            aws ec2 delete-vpc --vpc-id "$v_id" 2>/dev/null && echo "   ✅ VPC $v_id Removida" || echo "   ⚠️ Erro ao remover VPC (verifique dependências manuais)"
           done
