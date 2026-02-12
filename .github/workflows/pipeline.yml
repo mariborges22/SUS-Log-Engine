@@ -110,7 +110,7 @@ jobs:
   infra-and-deploy:
     name: Provision & Deploy
     needs: [engine-audit, api-audit, etl-audit, frontend-audit]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
