@@ -1,5 +1,42 @@
 # ==============================================================================
-# NEXUS-SUS BOOTSTRAP - DESATIVADO
-# Os recursos (S3 e DynamoDB) já foram criados na AWS.
-# Removendo as declarações para evitar conflitos de 'ResourceAlreadyExists'.
+# BOOTSTRAP INFRASTRUCTURE FOR TERRAFORM STATE
+# Este arquivo deve ser usado inicialmente para criar o S3 e DynamoDB.
+# Após a criação, o backend no provider.tf deve ser ativado.
 # ==============================================================================
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "nexus-sus-terraform-state"
+  
+  # Proteção contra deleção acidental
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "nexus-sus-terraform-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}

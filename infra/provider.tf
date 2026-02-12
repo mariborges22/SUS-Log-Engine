@@ -1,4 +1,4 @@
-terraform {
+ terraform {
   required_version = ">= 1.0.0"
 
   required_providers {
@@ -6,14 +6,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-  }
-
-  backend "s3" {
-    bucket         = "nexus-sus-terraform-state"
-    # A 'key' será configurada dinamicamente via -backend-config na pipeline
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "nexus-sus-terraform-locks"
   }
 }
 
