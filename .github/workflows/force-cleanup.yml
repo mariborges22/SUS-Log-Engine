@@ -114,7 +114,7 @@ jobs:
 
           # 6. Limpar VPCs e Dependências (CUIDADO!)
           echo "🌐 Limpando VPCs e Redes Órfãs..."
-          vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc-*" --query 'Vpcs[*].VpcId' --output text)
+          vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc*" --query 'Vpcs[*].VpcId' --output text)
           for vpc in $vpcs; do
             echo "🔥 Destruindo VPC: $vpc"
             # IGWs
