@@ -7,6 +7,10 @@ resource "aws_vpc" "main" {
   tags = {
     Name = "${var.project_name}-vpc-${var.environment}"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_internet_gateway" "main" {
@@ -29,6 +33,10 @@ resource "aws_subnet" "public" {
     Name = "${var.project_name}-public-subnet-${count.index + 1}-${var.environment}"
     Type = "Public"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Private Subnets (Isolated for RDS and Internal Logic)
@@ -41,6 +49,10 @@ resource "aws_subnet" "private" {
   tags = {
     Name = "${var.project_name}-private-subnet-${count.index + 1}-${var.environment}"
     Type = "Private"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
