@@ -25,7 +25,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Delete Orphaned Resources
         run: |
@@ -175,11 +175,18 @@ jobs:
             detach_and_delete_policy "$pol_name"
           done
 
-          # --- FASE 2: Network Clean (VPCs e Subnets) ---
-          echo "🌐 Limpando VPCs e Redes Órfãs (v9)..."
-          current_vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc*" --query 'Vpcs[*].VpcId' --output text)
+          # --- FASE 2: Network Clean (VPCs e Subnets - v10 Nuclear) ---
+          echo "🌐 Limpando VPCs e Redes Órfãs (Nuclear Discovery)..."
+          
+          # Discovery por Tag E por CIDR (Captura VPCs sem nome mas que são nossas)
+          current_vpcs=$(aws ec2 describe-vpcs --query "Vpcs[?CidrBlock=='10.0.0.0/16' || contains(Tags[?Key=='Name'].Value | [0], 'nexus-sus')].VpcId" --output text)
+          
+          if [[ -z "$current_vpcs" || "$current_vpcs" == "None" ]]; then
+            echo "✅ Nenhuma VPC conflitante encontrada no us-east-1."
+          fi
+
           for v_id in $current_vpcs; do
-            echo "🔥 Destruindo VPC: $v_id"
+            echo "🔥 Destruindo VPC Conflitante: $v_id"
             
             # 6.1 VPC Endpoints
             echo "   ⏳ Verificando VPC Endpoints..."
