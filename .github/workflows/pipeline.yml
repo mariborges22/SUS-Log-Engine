@@ -115,6 +115,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Nuclear Clean Cache
+        run: |
+          # Remover TUDO de terraform na máquina da pipeline
+          rm -rf infra/.terraform
+          rm -rf infra/.terraform.lock.hcl
+          rm -rf infra/terraform.tfstate*
+          rm -rf ~/.terraform*
+          rm -rf /tmp/terraform*
+          
+          # Limpar env vars
+          unset TF_LOG
+          unset TF_LOG_PATH
+          unset TF_DATA_DIR
+          
+          echo "✅ Cache limpo"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+      
       - name: Clean Terraform State
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
