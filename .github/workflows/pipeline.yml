@@ -141,8 +141,8 @@ jobs:
             -backend-config="key=${STATE_KEY}" \
             -backend-config="bucket=nexus-sus-terraform-state"
           
-          # Só cria a DynamoDB table pra locks (não toca no resto)
-          terraform plan -out=tfplan -target="aws_dynamodb_table.terraform_locks"
+          # Agora que o lock table existe, roda o ciclo completo
+          terraform plan -out=tfplan
           terraform apply tfplan
 
       - name: Configure AWS Credentials
