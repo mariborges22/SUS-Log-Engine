@@ -90,7 +90,19 @@ jobs:
             delete_ecr "$repo"
           done
 
-          # 2. RDS Groups e Instâncias (Discovery)
+          # 2. State Backend (The Soul Clean - CORREÇÃO DE CHECKSUM)
+          echo "🔄 Limpando State Backend (DynamoDB Locks)..."
+          lock_table="nexus-sus-terraform-locks"
+          bucket_name="nexus-sus-terraform-state"
+          for state_key in "terraform.tfstate" "staging/terraform.tfstate" "prod/terraform.tfstate"; do
+            echo "   🏁 Resetando Digest: $state_key"
+            # O ID do digest no DynamoDB é: <bucket>/<key>-md5
+            aws dynamodb delete-item --table-name "$lock_table" --key "{\"LockID\": {\"S\": \"$bucket_name/$state_key-md5\"}}" 2>/dev/null || true
+            # Limpa o lock comum também por segurança
+            aws dynamodb delete-item --table-name "$lock_table" --key "{\"LockID\": {\"S\": \"$bucket_name/$state_key\"}}" 2>/dev/null || true
+          done
+
+          # 3. RDS Discovery e Cleanup
           echo "🗄️ Limpando RDS (Discovery)..."
           # Deleta TODAS as instâncias que começam com nexus-sus
           all_rds=$(aws rds describe-db-instances --query "DBInstances[?starts_with(DBInstanceIdentifier, 'nexus-sus')].DBInstanceIdentifier" --output text 2>/dev/null)
@@ -106,7 +118,7 @@ jobs:
             aws rds delete-db-subnet-group --db-subnet-group-name "$sng" 2>/dev/null || true
           done
 
-          # 3. S3 (Discovery)
+          # 4. S3 (Discovery)
           echo "🪣 Limpando S3 (Discovery)..."
           all_buckets=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'nexus-sus')].Name" --output text 2>/dev/null)
           for bkt in $all_buckets; do
@@ -151,7 +163,7 @@ jobs:
             detach_and_delete_policy "$pol_name"
           done
 
-          # 6. VPCs e Redes (v7 - ECS & Deep Clean)
+          # 6. VPCs e Redes (v8 - Soul Clean)
           echo "🌐 Limpando VPCs e Redes Órfãs..."
           current_vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=nexus-sus-vpc*" --query 'Vpcs[*].VpcId' --output text)
           for v_id in $current_vpcs; do
