@@ -115,6 +115,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Remove Old DynamoDB Reference
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          # Deletar a tabela antiga (se existir)
+          aws dynamodb delete-table --table-name terraform-locks 2>/dev/null || true
+          
+          # Aguardar deletion
+          sleep 20
+          
+          echo "✅ Tabela antiga removida"
+
       - name: Nuclear Clean Cache
         run: |
           # Remover TUDO de terraform na máquina da pipeline
