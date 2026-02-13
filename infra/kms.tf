@@ -1,5 +1,3 @@
-data "aws_caller_identity" "current" {}
-
 resource "aws_kms_key" "lambda" {
   description             = "KMS key for Lambda environment variables"
   deletion_window_in_days = 7
