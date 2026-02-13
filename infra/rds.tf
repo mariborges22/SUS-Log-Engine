@@ -18,6 +18,10 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible  = false
 
   backup_retention_period = 1
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_db_subnet_group" "main" {
