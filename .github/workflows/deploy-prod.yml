@@ -59,6 +59,9 @@ jobs:
             -backend-config="region=us-east-1" \
             -backend-config="dynamodb_table=nexus-sus-terraform-locks"
           
+          # Remover VPC antiga do state (não deleta da AWS, só desvincula)
+          terraform state rm aws_vpc.main || true
+          
           terraform import aws_iam_policy.etl_s3_read arn:aws:iam::629614691528:policy/nexus-sus-etl-s3-read-policy-prod || true
           terraform import aws_iam_policy.etl_s3_write arn:aws:iam::629614691528:policy/nexus-sus-etl-s3-write-policy-prod || true
           terraform import aws_iam_policy.etl_ecr_access arn:aws:iam::629614691528:policy/nexus-sus-etl-ecr-access-policy-prod || true
