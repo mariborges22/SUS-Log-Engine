@@ -96,7 +96,7 @@ output "database_connection_string_template" {
 
 output "vpc_id" {
   description = "ID da VPC Nexus-SUS"
-  value       = aws_vpc.main.id
+  value       = data.aws_vpc.existing_prod.id
 }
 
 output "public_subnet_ids" {

@@ -113,7 +113,7 @@ resource "aws_ecs_service" "frontend" {
 # Security Groups for ECS
 resource "aws_security_group" "api" {
   name   = "${var.project_name}-api-sg-${var.environment}"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port       = 8080
@@ -132,7 +132,7 @@ resource "aws_security_group" "api" {
 
 resource "aws_security_group" "frontend" {
   name   = "${var.project_name}-frontend-sg-${var.environment}"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port       = 3000

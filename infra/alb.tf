@@ -16,7 +16,7 @@ resource "aws_lb_target_group" "frontend" {
   name        = "${var.project_name}-front-tg-${var.environment}"
   port        = 3000
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
   target_type = "ip"
 
   health_check {
@@ -29,7 +29,7 @@ resource "aws_lb_target_group" "api" {
   name        = "${var.project_name}-api-tg-${var.environment}"
   port        = 8080
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
   target_type = "ip"
 
   health_check {
@@ -75,7 +75,7 @@ resource "aws_lb_listener_rule" "api" {
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg-${var.environment}"
   description = "ALB Public Access"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port   = 80

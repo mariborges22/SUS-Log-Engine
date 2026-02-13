@@ -5,12 +5,12 @@
 # ==============================================================================
 
 resource "aws_vpc_endpoint" "s3" {
-  vpc_id       = aws_vpc.main.id
+  vpc_id       = data.aws_vpc.existing_prod.id
   service_name = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
 
   # Associa à Route Table Principal (usada pelas subnets privadas)
-  route_table_ids = [aws_vpc.main.main_route_table_id]
+  route_table_ids = [aws_route_table.private.id]
 
   tags = {
     Name = "${var.project_name}-s3-vpce-${var.environment}"
