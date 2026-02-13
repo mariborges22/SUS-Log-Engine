@@ -46,6 +46,7 @@ resource "aws_lambda_function" "etl" {
   runtime       = "python3.11"
   timeout       = 300 # 5 min timeout
   memory_size   = 512
+  kms_key_arn   = aws_kms_key.lambda.arn
 
   # Dummy filename inicial (o código real vem do GitHub Actions)
   # O Terraform precisa de um arquivo ZIP inicial válido
