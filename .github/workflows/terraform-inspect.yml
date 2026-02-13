@@ -1,0 +1,47 @@
+name: 🔍 Terraform State Inspector
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to inspect (staging or prod)'
+        required: true
+        default: 'prod'
+
+jobs:
+  inspect-state:
+    name: 🕵️ Inspect State
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra
+        run: |
+          terraform init \
+            -backend-config="bucket=nexus-sus-terraform-state" \
+            -backend-config="key=${{ github.event.inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="dynamodb_table=nexus-sus-terraform-locks" \
+            -reconfigure
+
+      - name: List Resource State
+        working-directory: infra
+        run: |
+          echo "--- 📋 LISTA DE RECURSOS NO STATE ---"
+          terraform state list
+          
+          echo ""
+          echo "--- 🔍 DETALHES DO STATE (Show) ---"
+          terraform show -no-color
