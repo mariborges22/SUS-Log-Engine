@@ -17,10 +17,6 @@ resource "aws_ecr_repository" "repos" {
     Project     = "Nexus-SUS"
     Environment = var.environment
   }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # Lifecycle Policy: Keep only the latest 30 images

@@ -8,9 +8,7 @@ resource "aws_s3_bucket" "terraform_state" {
   bucket = "nexus-sus-terraform-state"
   
   # Proteção contra deleção acidental
-  lifecycle {
-    prevent_destroy = true
-  }
+  tags = { Name = "Terraform State Bucket" }
 }
 
 resource "aws_s3_bucket_versioning" "terraform_state" {
