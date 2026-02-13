@@ -183,3 +183,22 @@ resource "aws_iam_role_policy_attachment" "etl_cloudwatch" {
   role       = aws_iam_role.etl_role.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
 }
+
+resource "aws_iam_role_policy" "etl_kms_decrypt" {
+  name   = "${var.project_name}-etl-kms-decrypt-${var.environment}"
+  role   = aws_iam_role.etl_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:GenerateDataKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
