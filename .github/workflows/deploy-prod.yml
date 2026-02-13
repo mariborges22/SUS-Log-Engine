@@ -67,7 +67,10 @@ jobs:
           terraform import aws_iam_policy.etl_ecr_access arn:aws:iam::629614691528:policy/nexus-sus-etl-ecr-access-policy-prod || true
           terraform import aws_iam_policy.ecs_logging arn:aws:iam::629614691528:policy/nexus-sus-ecs-logging-policy-prod || true
           
-          echo "✅ Resources imported successfully"
+          # Import Lambda
+          terraform import aws_lambda_function.etl nexus-sus-etl-prod || true
+          
+          echo "✅ All resources imported"
 
       - name: Terraform Plan
         working-directory: infra
