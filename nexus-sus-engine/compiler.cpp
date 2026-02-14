@@ -119,22 +119,32 @@ void free_table() {
 int main() {
   init_table();
 
+  char command_line[256];
   char command[10];
   char uf[5], regiao[50], comp[20], atual[20];
   double v_uf, v_reg, v_br;
 
-  // Loop de comandos:
-  // L <UF> <REGIAO> <V_UF> <V_REG> <V_BR> <COMPETENCIA> <ATUALIZACAO> (Load)
-  // Q <UF> (Query)
-  // X (Exit)
-  while (scanf("%9s", command) != EOF) {
+  // Changed to fgets to allow logging raw input
+  while (fgets(command_line, sizeof(command_line), stdin)) {
+    // Remove newline char if present
+    command_line[strcspn(command_line, "\n")] = 0;
+
+    fprintf(stderr, "🔹 Engine recebeu: %s\n", command_line);
+
+    // Parse command from line
+    if (sscanf(command_line, "%9s", command) != 1) continue;
+
     if (strcmp(command, "L") == 0) {
-      if (scanf("%4s %49s %lf %lf %lf %19s %19s", uf, regiao, &v_uf, &v_reg,
+      if (sscanf(command_line + 2, "%4s %49s %lf %lf %lf %19s %19s", uf, regiao, &v_uf, &v_reg,
                 &v_br, comp, atual) == 7) {
+        fprintf(stderr, "📥 Processando LOAD para %s\n", uf);
         insert_node(uf, regiao, v_uf, v_reg, v_br, comp, atual);
+      } else {
+        fprintf(stderr, "❌ Falha ao processar LOAD: %s\n", command_line);
       }
     } else if (strcmp(command, "Q") == 0) {
-      if (scanf("%4s", uf) == 1) {
+      if (sscanf(command_line + 2, "%4s", uf) == 1) {
+        fprintf(stderr, "🔍 Processando QUERY: %s\n", uf);
         const struct node *res = search_node(uf);
         if (res != NULL) {
           printf("{\"status\": \"success\", \"data\": {\"estado\": \"%s\", "

@@ -98,7 +98,7 @@ func loadFromDB() {
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Println("Erro ao conectar ao DB:", err)
+		log.Println("❌ Erro ao conectar ao DB:", err)
 		return
 	}
 	defer db.Close()
@@ -115,24 +115,26 @@ func loadFromDB() {
 		rowCount++
 		var ind Indicador
 		if err := rows.Scan(&ind.Estado, &ind.Regiao, &ind.VlUF, &ind.VlRegiao, &ind.VlBrasil, &ind.DtCompetencia, &ind.DtAtualizacao); err != nil {
-			log.Println("Erro ao escanear linha:", err)
+			log.Println("❌ Erro ao escanear linha:", err)
 			continue
 		}
 
 		safeUF := strings.ToUpper(strings.TrimSpace(ind.Estado))
 		if !ufRegex.MatchString(safeUF) {
+			log.Printf("⚠️  UF inválido ignorado: %s\n", ind.Estado)
 			continue 
 		}
 		safeRegiao := strings.ReplaceAll(strings.TrimSpace(ind.Regiao), " ", "_")
 
 		engineMu.Lock()
 		if engineStdin != nil {
-			fmt.Fprintf(engineStdin, "L %s %s %.2f %.2f %.2f %s %s\n",
-				safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+			cmd := fmt.Sprintf("L %s %s %.2f %.2f %.2f %s %s\n", safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+			log.Printf("📤 Enviando pro Engine: %s", cmd)
+			fmt.Fprint(engineStdin, cmd)
 		}
 		engineMu.Unlock()
 	}
-	log.Printf("✅ Carregados %d registros no Engine C++\n", rowCount)
+	log.Printf("✅ Carga concluída: %d registros enviados pro Engine C++\n", rowCount)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
