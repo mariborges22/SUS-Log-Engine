@@ -1,6 +1,6 @@
 # Estágio 1: Build da API Go
 FROM golang:1.21-bookworm AS go-builder
-WORKDIR /app
+WORKDIR /build
 COPY api/go.mod api/go.sum ./
 COPY api/ .
 RUN go mod tidy
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
+WORKDIR /build
 COPY nexus-sus-engine/compiler.cpp .
 RUN g++ -O3 compiler.cpp -o compiler -lpq
 
@@ -27,8 +27,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 RUN mkdir -p nexus-sus-engine
-COPY --from=go-builder /app/main .
-COPY --from=cpp-builder /app/compiler ./nexus-sus-engine/compiler
+COPY --from=go-builder /build/main .
+COPY --from=cpp-builder /build/compiler ./nexus-sus-engine/compiler
 RUN chmod +x ./main ./nexus-sus-engine/compiler
 
 EXPOSE 8080
