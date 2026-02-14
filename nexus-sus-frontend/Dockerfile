@@ -1,18 +1,17 @@
-FROM node:18-bookworm-slim AS builder
-
+FROM node:20 as builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
 
-# Estágio 2: Servidor Web (Nginx leve baseado em Debian)
-FROM nginx:stable
+FROM nginx:latest
+WORKDIR /app
 
-# Remove a configuração padrão do Nginx
-RUN rm /etc/nginx/conf.d/default.conf
+# Copiar arquivo de config do Nginx
+COPY default.conf /etc/nginx/conf.d/default.conf
 
-# Copia os arquivos do build para a pasta pública do Nginx
+# Copiar build do React
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80
