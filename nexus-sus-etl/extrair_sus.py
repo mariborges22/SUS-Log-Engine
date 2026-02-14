@@ -1,13 +1,13 @@
+import json
 import logging
 import os
 import sys
 import time
-from io import StringIO
+from datetime import datetime
 from urllib.parse import quote_plus
 
 import boto3
-import pandas as pd
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 from sqlalchemy import create_engine, text
 
 # Configuração de Logging Centralizado
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # Configurações de Ambiente (Fail-Fast)
 try:
     AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-    S3_BUCKET = os.environ["S3_BUCKET_NAME"]  # Nome do bucket production/staging
-    S3_KEY = os.getenv("S3_KEY", "dados_brutos.json")  # Caminho do arquivo
+    S3_BUCKET = os.environ["S3_BUCKET_NAME"]
+    S3_KEY = os.getenv("S3_KEY", "dados_brutos.json")
 
     DB_HOST = os.environ["DB_HOST"]
     DB_NAME = os.environ["DB_NAME"]
@@ -43,7 +43,7 @@ def retry_operation(max_retries=3, delay=2):
                     return func(*args, **kwargs)
                 except Exception as e:
                     retries += 1
-                    wait = delay * (2 ** (retries - 1))  # Backoff Exponencial
+                    wait = delay * (2 ** (retries - 1))
                     logger.warning(
                         f"Erro na tentativa {retries}/{max_retries}: {e}. Tentando novamente em {wait}s..."
                     )
@@ -57,10 +57,9 @@ def retry_operation(max_retries=3, delay=2):
 
 
 @retry_operation(max_retries=3, delay=2)
-def extract_from_s3() -> pd.DataFrame:
+def extract_from_s3() -> list:
     """
-    Baixa o arquivo JSON do S3 e carrega em um DataFrame Pandas.
-    Complexidade: O(N) leitura do stream.
+    Baixa o arquivo JSON do S3 e retorna como lista de dicts.
     """
     logger.info(f"Iniciando extração do S3: s3://{S3_BUCKET}/{S3_KEY}")
 
@@ -69,15 +68,13 @@ def extract_from_s3() -> pd.DataFrame:
     try:
         response = s3_client.get_object(Bucket=S3_BUCKET, Key=S3_KEY)
         json_content = response["Body"].read().decode("utf-8")
+        data = json.loads(json_content)
 
-        # Carregar JSON
-        # df = pd.read_json(StringIO(json_content))
-        # Note: Depending on the JSON structure, read_json behavior might vary.
-        # StringIO is correct for text streams.
-        df = pd.read_json(StringIO(json_content))
+        if isinstance(data, dict):
+            data = [data]
 
-        logger.info(f"Extração concluída. Rows: {len(df)}")
-        return df
+        logger.info(f"Extração concluída. Rows: {len(data)}")
+        return data
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":
@@ -87,17 +84,43 @@ def extract_from_s3() -> pd.DataFrame:
         raise
 
 
-def transform_data(df: pd.DataFrame) -> pd.DataFrame:
+def _safe_float(value):
+    """Converte valor para float com fallback 0.0."""
+    try:
+        return float(value) if value is not None else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _safe_date(value):
+    """Converte valor para date string (YYYY-MM-DD) com fallback None."""
+    if value is None:
+        return None
+    try:
+        if isinstance(value, str):
+            # Tenta vários formatos
+            for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+                except ValueError:
+                    continue
+        return str(value)[:10]
+    except Exception:
+        return None
+
+
+def transform_data(raw_data: list) -> list:
     """
     Aplica regras de negócio, renomeia colunas e valida tipos.
+    Sem pandas — usa Python puro.
     """
     logger.info("Iniciando Transformação de Dados...")
 
-    if df.empty:
-        logger.warning("DataFrame vazio. Nada para transformar.")
-        return df
+    if not raw_data:
+        logger.warning("Dados vazios. Nada para transformar.")
+        return []
 
-    # 1. Renomear Colunas (Mapeamento JSON -> SQL)
+    # 1. Mapeamento JSON -> SQL
     rename_map = {
         "no_uf": "estado",
         "no_regiao_brasil": "regiao",
@@ -108,58 +131,48 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
         "dt_atualizacao": "dt_atualizacao",
     }
 
-    df_transformed = df.rename(columns=rename_map)[list(rename_map.values())]
+    transformed = []
+    for row in raw_data:
+        record = {}
+        for json_key, sql_key in rename_map.items():
+            record[sql_key] = row.get(json_key)
 
-    # 2. Conversão de Tipos
-    # Converter datas
-    df_transformed["dt_competencia"] = pd.to_datetime(
-        df_transformed["dt_competencia"]
-    ).dt.date
-    df_transformed["dt_atualizacao"] = pd.to_datetime(
-        df_transformed["dt_atualizacao"]
-    ).dt.date
+        # 2. Conversão de tipos
+        record["vl_uf"] = _safe_float(record["vl_uf"])
+        record["vl_regiao"] = _safe_float(record["vl_regiao"])
+        record["vl_brasil"] = _safe_float(record["vl_brasil"])
+        record["dt_competencia"] = _safe_date(record["dt_competencia"])
+        record["dt_atualizacao"] = _safe_date(record["dt_atualizacao"])
 
-    # Converter valores numéricos (garantir float)
-    numeric_cols = ["vl_uf", "vl_regiao", "vl_brasil"]
-    for col in numeric_cols:
-        df_transformed[col] = (
-            pd.to_numeric(df_transformed[col], errors="coerce")
-            .fillna(0.0)
-            .astype(float)
-        )
+        # 3. Validação de Nulos Críticos
+        if record["estado"] and record["dt_competencia"]:
+            transformed.append(record)
 
-    # 3. Remover Duplicatas (Regra de Negócio: Estado + Competência deve ser único)
-    initial_rows = len(df_transformed)
-    df_transformed = df_transformed.drop_duplicates(
-        subset=["estado", "dt_competencia"], keep="last"
-    )
-    if len(df_transformed) < initial_rows:
-        logger.info(f"Removidas {initial_rows - len(df_transformed)} duplicatas.")
+    # 4. Deduplicação (estado + dt_competencia, keep last)
+    seen = {}
+    for record in transformed:
+        key = (record["estado"], record["dt_competencia"])
+        seen[key] = record  # Sobrescreve = keep last
 
-    # 4. Validação de Nulos Críticos
-    if (
-        df_transformed["estado"].isnull().any()
-        or df_transformed["dt_competencia"].isnull().any()
-    ):
-        logger.error("Dados críticos (estado ou data) nulos encontrados!")
-        raise ValueError("Critical null values detected")
+    deduped = list(seen.values())
 
-    logger.info("Transformação concluída com sucesso.")
-    return df_transformed
+    if len(transformed) > len(deduped):
+        logger.info(f"Removidas {len(transformed) - len(deduped)} duplicatas.")
+
+    logger.info(f"Transformação concluída. {len(deduped)} registros válidos.")
+    return deduped
 
 
-def load_to_rds(df: pd.DataFrame):
+def load_to_rds(records: list):
     """
-    Carrega dados no PostgreSQL usando SQLAlchemy e UPSERT (INSERT ON CONFLICT).
-    Segurança: Prepared Statements via Engine.
+    Carrega dados no PostgreSQL usando SQLAlchemy e UPSERT.
     """
     logger.info("Iniciando Carga no RDS (PostgreSQL)...")
 
-    if df.empty:
+    if not records:
         logger.info("Nada para carregar.")
         return
 
-    # Connection String Segura (URL Encoded)
     db_url = (
         f"postgresql+psycopg2://{DB_USER}:{quote_plus(DB_PASSWORD)}@"
         f"{DB_HOST}:5432/{DB_NAME}?sslmode=require"
@@ -167,14 +180,13 @@ def load_to_rds(df: pd.DataFrame):
 
     engine = create_engine(
         db_url,
-        pool_size=5,  # Max conexões simultâneas
-        max_overflow=2,  # Overflow permitido
-        pool_timeout=30,  # Timeout para pegar conexão
-        pool_recycle=1800,  # Reciclar conexões antigas
+        pool_size=5,
+        max_overflow=2,
+        pool_timeout=30,
+        pool_recycle=1800,
     )
 
-    # 0. Garantir Schema (Self-Healing)
-    # Como não conseguimos rodar psql externo, a Lambda cria a tabela se não existir
+    # Garantir Schema
     try:
         with open("create_table.sql", "r") as f:
             ddl_sql = f.read()
@@ -197,18 +209,17 @@ def load_to_rds(df: pd.DataFrame):
 
     # Batch Insert (500 rows por vez)
     batch_size = 500
-    rows = df.to_dict(orient="records")
-    total_rows = len(rows)
+    total_rows = len(records)
 
-    with engine.begin() as conn:  # Transaction Scope (Auto Commit/Rollback)
+    with engine.begin() as conn:
         for i in range(0, total_rows, batch_size):
-            batch = rows[i : i + batch_size]
+            batch = records[i : i + batch_size]
             try:
                 conn.execute(upsert_sql, batch)
                 logger.info(f"Batch {i//batch_size + 1} processado ({len(batch)} rows)")
             except Exception as e:
                 logger.error(f"Erro no batch {i}: {e}")
-                raise  # Transaction will rollback
+                raise
 
     logger.info(f"Carga concluída! Total processado: {total_rows} registros.")
 
@@ -222,23 +233,22 @@ def lambda_handler(event, context):
 
     try:
         # Step 1: Extract
-        df_raw = extract_from_s3()
+        raw_data = extract_from_s3()
 
         # Step 2: Transform
-        df_clean = transform_data(df_raw)
+        clean_data = transform_data(raw_data)
 
         # Step 3: Load
-        load_to_rds(df_clean)
+        load_to_rds(clean_data)
 
         elapsed = time.time() - start_time
         logger.info(f"=== PIPELINE FINALIZADO COM SUCESSO em {elapsed:.2f}s ===")
 
         return {
             "statusCode": 200,
-            "body": f"ETL Success. Processed {len(df_clean)} records in {elapsed:.2f}s",
+            "body": f"ETL Success. Processed {len(clean_data)} records in {elapsed:.2f}s",
         }
 
     except Exception as e:
         logger.critical(f"Pipeline falhou: {e}")
-        # Lambda deve levantar exceção para ser marcada como erro no CloudWatch
         raise e
