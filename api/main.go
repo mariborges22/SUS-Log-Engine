@@ -105,12 +105,14 @@ func loadFromDB() {
 
 	rows, err := db.Query("SELECT estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
 	if err != nil {
-		log.Println("Erro ao buscar indicadores:", err)
+		log.Println("❌ Erro ao buscar indicadores:", err)
 		return
 	}
 	defer rows.Close()
 
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		var ind Indicador
 		if err := rows.Scan(&ind.Estado, &ind.Regiao, &ind.VlUF, &ind.VlRegiao, &ind.VlBrasil, &ind.DtCompetencia, &ind.DtAtualizacao); err != nil {
 			log.Println("Erro ao escanear linha:", err)
@@ -130,7 +132,7 @@ func loadFromDB() {
 		}
 		engineMu.Unlock()
 	}
-	log.Println("Carga de dados no Engine C++ concluída.")
+	log.Printf("✅ Carregados %d registros no Engine C++\n", rowCount)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
