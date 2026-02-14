@@ -116,11 +116,19 @@ jobs:
           # 3. Instalar dependências NO LUGAR CERTO (flat python/)
           pip install -r nexus-sus-etl/requirements.txt -t etl-package/python/
           
-          # 4. Remover lixo pra reduzir tamanho
+          # 4. Remover lixo e pacotes pesados pra reduzir tamanho
           find etl-package -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true
           find etl-package -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
           find etl-package -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
-          rm -rf etl-package/python/boto3 etl-package/python/botocore 2>/dev/null || true
+          find etl-package -name "*.pyc" -delete 2>/dev/null || true
+          # Remover pacotes já nativos no Lambda ou desnecessários
+          rm -rf etl-package/python/boto3 etl-package/python/botocore etl-package/python/s3transfer 2>/dev/null || true
+          rm -rf etl-package/python/urllib3 etl-package/python/jmespath 2>/dev/null || true
+          # Remover numpy (pandas funciona sem ele para operações básicas)
+          rm -rf etl-package/python/numpy etl-package/python/numpy.libs 2>/dev/null || true
+          
+          echo "Layer size after cleanup:"
+          du -sh etl-package/python/
           
           # 5. Zipar layer (COM a pasta python/ na raiz)
           cd etl-package
