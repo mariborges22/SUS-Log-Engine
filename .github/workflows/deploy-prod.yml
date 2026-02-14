@@ -101,6 +101,51 @@ jobs:
           echo "✅ Deployment complete"
           echo "Check your application at the ALB endpoint in AWS Console"
 
+      - name: Build ETL Lambda Function
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          # 1. Criar estrutura de diretórios
+          mkdir -p etl-package/python/lib/python3.11/site-packages
+          mkdir -p etl-code
+          
+          # 2. Instalar dependências
+          pip install -r nexus-sus-etl/requirements.txt -t etl-package/python/lib/python3.11/site-packages/
+          
+          # 3. Copiar código
+          cp nexus-sus-etl/extrair_sus.py etl-code/
+          cp nexus-sus-etl/create_table.sql etl-code/
+          
+          # 4. Zipar código da função
+          cd etl-code
+          zip -r ../etl-function.zip .
+          cd ..
+          
+          # 5. Zipar layer de dependências
+          cd etl-package
+          zip -r ../etl-layer.zip python/
+          cd ..
+          
+          # 6. Upload código pra Lambda
+          aws lambda update-function-code \
+            --function-name nexus-sus-etl-prod \
+            --zip-file fileb://etl-function.zip
+          
+          # 7. Publicar layer de dependências
+          LAYER_ARN=$(aws lambda publish-layer-version \
+            --layer-name nexus-sus-etl-dependencies-prod \
+            --zip-file fileb://etl-layer.zip \
+            --compatible-runtimes python3.11 \
+            --query 'LayerVersionArn' --output text)
+          
+          # 8. Atualizar Lambda pra usar o layer
+          aws lambda update-function-configuration \
+            --function-name nexus-sus-etl-prod \
+            --layers "$LAYER_ARN"
+          
+          echo "✅ ETL Lambda updated with code and dependencies"
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
