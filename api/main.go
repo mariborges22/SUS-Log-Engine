@@ -103,7 +103,7 @@ func loadFromDB() {
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT estado, regiao, valor_uf, valor_regiao, valor_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
+	rows, err := db.Query("SELECT estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
 	if err != nil {
 		log.Println("Erro ao buscar indicadores:", err)
 		return
