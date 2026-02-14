@@ -106,43 +106,52 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          # 1. Criar estrutura de diretórios
-          mkdir -p etl-package/python/lib/python3.11/site-packages
+          # 1. Limpar tudo antes
+          rm -rf etl-package etl-code etl-function.zip etl-layer.zip
+          
+          # 2. Criar estrutura CORRETA do layer
+          mkdir -p etl-package/python
           mkdir -p etl-code
           
-          # 2. Instalar dependências
-          pip install -r nexus-sus-etl/requirements.txt -t etl-package/python/lib/python3.11/site-packages/
+          # 3. Instalar dependências NO LUGAR CERTO (flat python/)
+          pip install -r nexus-sus-etl/requirements.txt -t etl-package/python/
           
-          # 3. Copiar código
-          cp nexus-sus-etl/extrair_sus.py etl-code/
-          cp nexus-sus-etl/create_table.sql etl-code/
+          # 4. Remover lixo pra reduzir tamanho
+          find etl-package -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true
+          find etl-package -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          find etl-package -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
+          rm -rf etl-package/python/boto3 etl-package/python/botocore 2>/dev/null || true
           
-          # 4. Zipar código da função
-          cd etl-code
-          zip -r ../etl-function.zip .
-          cd ..
-          
-          # 5. Zipar layer de dependências
+          # 5. Zipar layer (COM a pasta python/ na raiz)
           cd etl-package
           zip -r ../etl-layer.zip python/
           cd ..
           
-          # 6. Upload código pra Lambda
+          # 6. Copiar código pra pasta separada
+          cp nexus-sus-etl/extrair_sus.py etl-code/
+          cp nexus-sus-etl/create_table.sql etl-code/
+          
+          # 7. Zipar código
+          cd etl-code
+          zip -r ../etl-function.zip .
+          cd ..
+          
+          # 8. Upload código pra Lambda
           aws lambda update-function-code \
             --function-name nexus-sus-etl-prod \
             --zip-file fileb://etl-function.zip
           
-          # 7. Upload layer pro S3 (bypass do limite de 70MB)
+          # 9. Upload layer pro S3 (bypass do limite de 70MB)
           aws s3 cp etl-layer.zip s3://nexus-sus-data-lake-prod/lambda-layers/etl-layer.zip
           
-          # 8. Publicar layer a partir do S3
+          # 10. Publicar layer a partir do S3
           LAYER_ARN=$(aws lambda publish-layer-version \
             --layer-name nexus-sus-etl-dependencies-prod \
             --content S3Bucket=nexus-sus-data-lake-prod,S3Key=lambda-layers/etl-layer.zip \
             --compatible-runtimes python3.11 \
             --query 'LayerVersionArn' --output text)
           
-          # 9. Atualizar Lambda pra usar o layer
+          # 11. Atualizar Lambda pra usar o layer
           aws lambda update-function-configuration \
             --function-name nexus-sus-etl-prod \
             --layers "$LAYER_ARN"
