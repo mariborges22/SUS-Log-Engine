@@ -132,14 +132,17 @@ jobs:
             --function-name nexus-sus-etl-prod \
             --zip-file fileb://etl-function.zip
           
-          # 7. Publicar layer de dependências
+          # 7. Upload layer pro S3 (bypass do limite de 70MB)
+          aws s3 cp etl-layer.zip s3://nexus-sus-data-lake-prod/lambda-layers/etl-layer.zip
+          
+          # 8. Publicar layer a partir do S3
           LAYER_ARN=$(aws lambda publish-layer-version \
             --layer-name nexus-sus-etl-dependencies-prod \
-            --zip-file fileb://etl-layer.zip \
+            --content S3Bucket=nexus-sus-data-lake-prod,S3Key=lambda-layers/etl-layer.zip \
             --compatible-runtimes python3.11 \
             --query 'LayerVersionArn' --output text)
           
-          # 8. Atualizar Lambda pra usar o layer
+          # 9. Atualizar Lambda pra usar o layer
           aws lambda update-function-configuration \
             --function-name nexus-sus-etl-prod \
             --layers "$LAYER_ARN"
