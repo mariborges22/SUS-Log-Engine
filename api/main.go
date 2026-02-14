@@ -110,6 +110,17 @@ func loadFromDB() {
 	}
 	defer rows.Close()
 
+	// Mapa de Estados para Siglas
+	stateMap := map[string]string{
+		"Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
+		"Bahia": "BA", "Ceará": "CE", "Distrito Federal": "DF", "Espírito Santo": "ES",
+		"Goiás": "GO", "Maranhão": "MA", "Mato Grosso": "MT", "Mato Grosso do Sul": "MS",
+		"Minas Gerais": "MG", "Pará": "PA", "Paraíba": "PB", "Paraná": "PR",
+		"Pernambuco": "PE", "Piauí": "PI", "Rio de Janeiro": "RJ", "Rio Grande do Norte": "RN",
+		"Rio Grande do Sul": "RS", "Rondônia": "RO", "Roraima": "RR", "Santa Catarina": "SC",
+		"São Paulo": "SP", "Sergipe": "SE", "Tocantins": "TO",
+	}
+
 	rowCount := 0
 	for rows.Next() {
 		rowCount++
@@ -119,11 +130,21 @@ func loadFromDB() {
 			continue
 		}
 
-		safeUF := strings.ToUpper(strings.TrimSpace(ind.Estado))
-		if !ufRegex.MatchString(safeUF) {
-			log.Printf("⚠️  UF inválido ignorado: %s\n", ind.Estado)
-			continue 
+		// Normaliza e busca a sigla
+		dbState := strings.TrimSpace(ind.Estado)
+		safeUF, ok := stateMap[dbState]
+		
+		// Fallback: Se não estiver no mapa, tenta verificar se já é uma sigla válida
+		if !ok {
+			upperState := strings.ToUpper(dbState)
+			if ufRegex.MatchString(upperState) {
+				safeUF = upperState
+			} else {
+				log.Printf("⚠️  Estado desconhecido ignorado: %s\n", dbState)
+				continue
+			}
 		}
+
 		safeRegiao := strings.ReplaceAll(strings.TrimSpace(ind.Regiao), " ", "_")
 
 		engineMu.Lock()
