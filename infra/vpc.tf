@@ -1,16 +1,21 @@
 # Networking: VPC and Subnets
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name = "${var.project_name}-vpc-${var.environment}"
-  }
+# Usar a VPC existente em produção
+data "aws_vpc" "existing_prod" {
+  id = "vpc-07b1698a6b617a2ee"
 }
 
+# resource "aws_vpc" "main" {
+#   cidr_block           = var.vpc_cidr
+#   enable_dns_hostnames = true
+#   enable_dns_support   = true
+#
+#   tags = {
+#     Name = "${var.project_name}-vpc-${var.environment}"
+#   }
+# }
+
 resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   tags = {
     Name = "${var.project_name}-igw-${var.environment}"
@@ -20,7 +25,7 @@ resource "aws_internet_gateway" "main" {
 # Public Subnets
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_cidrs)
-  vpc_id                  = aws_vpc.main.id
+  vpc_id                  = data.aws_vpc.existing_prod.id
   cidr_block              = var.public_subnet_cidrs[count.index]
   availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
@@ -34,7 +39,7 @@ resource "aws_subnet" "public" {
 # Private Subnets (Isolated for RDS and Internal Logic)
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = data.aws_vpc.existing_prod.id
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
@@ -60,7 +65,7 @@ resource "aws_nat_gateway" "main" {
 
 # Route Tables
 resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   route {
     cidr_block = "0.0.0.0/0"
@@ -73,7 +78,7 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   route {
     cidr_block     = "0.0.0.0/0"

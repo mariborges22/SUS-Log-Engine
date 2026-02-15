@@ -18,6 +18,10 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible  = false
 
   backup_retention_period = 1
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_db_subnet_group" "main" {
@@ -29,7 +33,7 @@ resource "aws_db_subnet_group" "main" {
 
 resource "aws_security_group" "rds" {
   name   = "${var.project_name}-rds-sg-${var.environment}"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port       = 5432

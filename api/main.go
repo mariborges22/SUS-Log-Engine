@@ -98,39 +98,64 @@ func loadFromDB() {
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Println("Erro ao conectar ao DB:", err)
+		log.Println("❌ Erro ao conectar ao DB:", err)
 		return
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT estado, regiao, valor_uf, valor_regiao, valor_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
+	rows, err := db.Query("SELECT estado, regiao, vl_uf, vl_regiao, vl_brasil, dt_competencia, dt_atualizacao FROM indicadores_sus")
 	if err != nil {
-		log.Println("Erro ao buscar indicadores:", err)
+		log.Println("❌ Erro ao buscar indicadores:", err)
 		return
 	}
 	defer rows.Close()
 
+	// Mapa de Estados para Siglas
+	stateMap := map[string]string{
+		"Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
+		"Bahia": "BA", "Ceará": "CE", "Distrito Federal": "DF", "Espírito Santo": "ES",
+		"Goiás": "GO", "Maranhão": "MA", "Mato Grosso": "MT", "Mato Grosso do Sul": "MS",
+		"Minas Gerais": "MG", "Pará": "PA", "Paraíba": "PB", "Paraná": "PR",
+		"Pernambuco": "PE", "Piauí": "PI", "Rio de Janeiro": "RJ", "Rio Grande do Norte": "RN",
+		"Rio Grande do Sul": "RS", "Rondônia": "RO", "Roraima": "RR", "Santa Catarina": "SC",
+		"São Paulo": "SP", "Sergipe": "SE", "Tocantins": "TO",
+	}
+
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		var ind Indicador
 		if err := rows.Scan(&ind.Estado, &ind.Regiao, &ind.VlUF, &ind.VlRegiao, &ind.VlBrasil, &ind.DtCompetencia, &ind.DtAtualizacao); err != nil {
-			log.Println("Erro ao escanear linha:", err)
+			log.Println("❌ Erro ao escanear linha:", err)
 			continue
 		}
 
-		safeUF := strings.ToUpper(strings.TrimSpace(ind.Estado))
-		if !ufRegex.MatchString(safeUF) {
-			continue 
+		// Normaliza e busca a sigla
+		dbState := strings.TrimSpace(ind.Estado)
+		safeUF, ok := stateMap[dbState]
+		
+		// Fallback: Se não estiver no mapa, tenta verificar se já é uma sigla válida
+		if !ok {
+			upperState := strings.ToUpper(dbState)
+			if ufRegex.MatchString(upperState) {
+				safeUF = upperState
+			} else {
+				log.Printf("⚠️  Estado desconhecido ignorado: %s\n", dbState)
+				continue
+			}
 		}
+
 		safeRegiao := strings.ReplaceAll(strings.TrimSpace(ind.Regiao), " ", "_")
 
 		engineMu.Lock()
 		if engineStdin != nil {
-			fmt.Fprintf(engineStdin, "L %s %s %.2f %.2f %.2f %s %s\n",
-				safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+			cmd := fmt.Sprintf("L %s %s %.2f %.2f %.2f %s %s\n", safeUF, safeRegiao, ind.VlUF, ind.VlRegiao, ind.VlBrasil, ind.DtCompetencia, ind.DtAtualizacao)
+			log.Printf("📤 Enviando pro Engine: %s", cmd)
+			fmt.Fprint(engineStdin, cmd)
 		}
 		engineMu.Unlock()
 	}
-	log.Println("Carga de dados no Engine C++ concluída.")
+	log.Printf("✅ Carga concluída: %d registros enviados pro Engine C++\n", rowCount)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {

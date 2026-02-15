@@ -20,52 +20,74 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: 📤 Upload Data JSON to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+        run: |
+          # Define environment
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            BUCKET_NAME="nexus-sus-data-lake-prod"
+          else
+            BUCKET_NAME="nexus-sus-data-lake-staging"
+          fi
+          
+          # Upload arquivo JSON de dados
+          echo "📤 Uploading data JSON to S3..."
+          aws s3 cp data/mgdi_ms_3f6.json s3://$BUCKET_NAME/dados_brutos.json
+          
+          echo "✅ Data uploaded to s3://$BUCKET_NAME/dados_brutos.json"
+
       - name: 📦 Create Lambda Deployment Package
         run: |
           mkdir -p package
           
-          # 1. Instalar dependências (boto3 já existe na Lambda AWS, removendo para economizar espaço)
+          # 1. Instalar dependências SEM pandas/numpy (leve!)
           pip install \
             --platform manylinux2014_x86_64 \
             --target ./package \
             --implementation cp \
             --python-version 3.11 \
             --only-binary=:all: --upgrade \
-            pandas sqlalchemy psycopg2-binary
+            sqlalchemy psycopg2-binary
 
           # 2. Copiar script ETL e SQL Schema
           cp nexus-sus-etl/extrair_sus.py ./package/
           cp nexus-sus-etl/create_table.sql ./package/
           
-          # 3. Zipar tudo
+          # 3. Limpar lixo
+          find package -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true
+          find package -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          
+          # 4. Zipar tudo
           cd package
           zip -r ../deployment_package.zip .
           cd ..
           
-          echo "📦 Pacote ZIP criado: deployment_package.zip"
+          echo "📦 Pacote ZIP criado:"
           du -h deployment_package.zip
 
       - name: 🚀 Deploy & Invoke Lambda
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_REGION: us-east-1
         run: |
-          # Define Environment logic
+          # Define Environment
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            ENV="production"
-            LAMBDA_NAME="nexus-sus-etl-production"
+            ENV="prod"
           else
             ENV="staging"
-            LAMBDA_NAME="nexus-sus-etl-staging"
           fi
           
+          LAMBDA_NAME="nexus-sus-etl-${ENV}"
           BUCKET_NAME="nexus-sus-data-lake-${ENV}"
           S3_KEY="artifacts/lambda/etl-${{ github.sha }}.zip"
           
           echo "🚀 Config: Lambda=$LAMBDA_NAME | Bucket=$BUCKET_NAME"
           
-          # 1. Upload para S3 (Bypass no limite de 50MB direct upload)
+          # 1. Upload para S3
           echo "📤 Uploading package to s3://$BUCKET_NAME/$S3_KEY"
           aws s3 cp deployment_package.zip s3://$BUCKET_NAME/$S3_KEY
           
@@ -77,7 +99,7 @@ jobs:
             --s3-key $S3_KEY
 
           echo "⏳ Waiting for update..."
-          sleep 10
+          sleep 15
           
           echo "⚡ Invoking Lambda..."
           aws lambda invoke \
@@ -89,7 +111,7 @@ jobs:
           echo "📄 Lambda Output:"
           cat response.json
           
-          if grep -q "ErrorMessage" response.json; then
+          if grep -q "errorMessage" response.json; then
             echo "❌ ETL Falhou!"
             exit 1
           fi

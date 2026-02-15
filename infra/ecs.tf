@@ -58,7 +58,7 @@ resource "aws_ecs_task_definition" "frontend" {
       name      = "nexus-sus-frontend"
       image     = "${aws_ecr_repository.repos["nexus-sus-frontend"].repository_url}:latest"
       essential = true
-      portMappings = [{ containerPort = 3000, hostPort = 3000 }]
+      portMappings = [{ containerPort = 80, hostPort = 80 }]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -78,6 +78,7 @@ resource "aws_ecs_service" "api" {
   task_definition = aws_ecs_task_definition.api.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     subnets         = aws_subnet.private[*].id
@@ -104,16 +105,16 @@ resource "aws_ecs_service" "frontend" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = data.aws_lb_target_group.frontend.arn
     container_name   = "nexus-sus-frontend"
-    container_port   = 3000
+    container_port   = 80
   }
 }
 
 # Security Groups for ECS
 resource "aws_security_group" "api" {
   name   = "${var.project_name}-api-sg-${var.environment}"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port       = 8080
@@ -132,11 +133,11 @@ resource "aws_security_group" "api" {
 
 resource "aws_security_group" "frontend" {
   name   = "${var.project_name}-frontend-sg-${var.environment}"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.existing_prod.id
 
   ingress {
-    from_port       = 3000
-    to_port         = 3000
+    from_port       = 80
+    to_port         = 80
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }

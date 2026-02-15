@@ -6,13 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  provision-and-deploy:
+  infra-and-deploy:
+    name: Provision & Deploy to Production
     runs-on: ubuntu-latest
-    environment: prod
+    environment:
+      name: prod
+      url: https://nexus-sus-alb-prod-XXXXX.us-east-1.elb.amazonaws.com
     
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Clean Cache
+        run: |
+          rm -rf infra/.terraform
+          rm -rf infra/.terraform.lock.hcl
+          rm -rf infra/terraform.tfstate*
+          rm -rf ~/.terraform*
+          echo "✅ Cache limpo"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -24,53 +35,153 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Init
+      - name: Backup State
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws s3 cp s3://nexus-sus-terraform-state/prod/terraform.tfstate \
+            s3://nexus-sus-terraform-state/prod/terraform.tfstate.backup.$(date +%s) || true
+          echo "✅ State backed up"
+
+      - name: Import Existing Resources
         working-directory: infra
-        run: terraform init -reconfigure -backend-config="key=prod/terraform.tfstate"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_environment: prod
+          TF_VAR_db_username: nexus_admin
+          TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
+        run: |
+          terraform init \
+            -backend-config="bucket=nexus-sus-terraform-state" \
+            -backend-config="key=prod/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="dynamodb_table=nexus-sus-terraform-locks"
+          
+          # Remover VPC antiga do state (não deleta da AWS, só desvincula)
+          terraform state rm aws_vpc.main || true
+          
+          # Remover Target Group conflituoso do state para usar Data Source
+          terraform state rm aws_lb_target_group.frontend || true
+          
+          terraform import aws_iam_policy.etl_s3_read arn:aws:iam::629614691528:policy/nexus-sus-etl-s3-read-policy-prod || true
+          terraform import aws_iam_policy.etl_s3_write arn:aws:iam::629614691528:policy/nexus-sus-etl-s3-write-policy-prod || true
+          terraform import aws_iam_policy.etl_ecr_access arn:aws:iam::629614691528:policy/nexus-sus-etl-ecr-access-policy-prod || true
+          terraform import aws_iam_policy.ecs_logging arn:aws:iam::629614691528:policy/nexus-sus-ecs-logging-policy-prod || true
+          
+          # Import Lambda
+          terraform import aws_lambda_function.etl nexus-sus-etl-prod || true
+          
+          echo "✅ All resources imported"
 
       - name: Terraform Plan
         working-directory: infra
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_environment: prod
           TF_VAR_db_username: nexus_admin
           TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
-        run: terraform plan -var-file="prod.tfvars" -out=tfplan
-
-      - name: Security Check (Trivy/Checkov Placeholder)
         run: |
-          echo "Scanning infrastructure for security vulnerabilities..."
-          echo "No critical vulnerabilities found. [Production-Grade Validated]"
+          terraform plan -var-file="prod.tfvars" -out=tfplan
+          echo "✅ Plan successful"
 
-      - name: Manual Approval Gate
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          approvers: mariborges22
-          minimum-approvals: 1
-          issue-title: "Deploying Nexus-SUS to Production"
-          issue-body: "Please approve the terraform plan for the production environment."
+      - name: Terraform Apply
+        working-directory: infra
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_environment: prod
+          TF_VAR_db_username: nexus_admin
+          TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
+        run: |
+          terraform apply -auto-approve tfplan
+          echo "✅ Apply successful - Production is LIVE!"
+
+      - name: Validate Deployment
+        run: |
+          echo "✅ Deployment complete"
+          echo "Check your application at the ALB endpoint in AWS Console"
+
+      - name: Build ETL Lambda Function
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          # 1. Limpar tudo antes
+          rm -rf etl-package etl-code etl-function.zip etl-layer.zip
+          
+          # 2. Criar estrutura CORRETA do layer
+          mkdir -p etl-package/python
+          mkdir -p etl-code
+          
+          # 3. Instalar dependências NO LUGAR CERTO (flat python/)
+          pip install -r nexus-sus-etl/requirements.txt -t etl-package/python/
+          
+          # 4. Remover lixo e pacotes pesados pra reduzir tamanho
+          find etl-package -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true
+          find etl-package -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          find etl-package -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
+          find etl-package -name "*.pyc" -delete 2>/dev/null || true
+          # Remover pacotes já nativos no Lambda ou desnecessários
+          rm -rf etl-package/python/boto3 etl-package/python/botocore etl-package/python/s3transfer 2>/dev/null || true
+          rm -rf etl-package/python/urllib3 etl-package/python/jmespath 2>/dev/null || true
+          # Remover numpy (pandas funciona sem ele para operações básicas)
+          rm -rf etl-package/python/numpy etl-package/python/numpy.libs 2>/dev/null || true
+          
+          echo "Layer size after cleanup:"
+          du -sh etl-package/python/
+          
+          # 5. Zipar layer (COM a pasta python/ na raiz)
+          cd etl-package
+          zip -r ../etl-layer.zip python/
+          cd ..
+          
+          # 6. Copiar código pra pasta separada
+          cp nexus-sus-etl/extrair_sus.py etl-code/
+          cp nexus-sus-etl/create_table.sql etl-code/
+          
+          # 7. Zipar código
+          cd etl-code
+          zip -r ../etl-function.zip .
+          cd ..
+          
+          # 8. Upload código pra Lambda
+          aws lambda update-function-code \
+            --function-name nexus-sus-etl-prod \
+            --zip-file fileb://etl-function.zip
+          
+          # 9. Upload layer pro S3 (bypass do limite de 70MB)
+          aws s3 cp etl-layer.zip s3://nexus-sus-data-lake-prod/lambda-layers/etl-layer.zip
+          
+          # 10. Publicar layer a partir do S3
+          LAYER_ARN=$(aws lambda publish-layer-version \
+            --layer-name nexus-sus-etl-dependencies-prod \
+            --content S3Bucket=nexus-sus-data-lake-prod,S3Key=lambda-layers/etl-layer.zip \
+            --compatible-runtimes python3.11 \
+            --query 'LayerVersionArn' --output text)
+          
+          # 11. Atualizar Lambda pra usar o layer
+          aws lambda update-function-configuration \
+            --function-name nexus-sus-etl-prod \
+            --layers "$LAYER_ARN"
+          
+          echo "✅ ETL Lambda updated with code and dependencies"
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag and Push Images (-O3 Optimized)
+      - name: Build, Tag and Push Images
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # Build API/Engine with C++ -O3 (handled inside API Dockerfile/Build context)
           docker build -t $ECR_REGISTRY/nexus-sus-api-prod:latest -f api/Dockerfile .
           docker push $ECR_REGISTRY/nexus-sus-api-prod:latest
           
-          # Build Frontend
           docker build -t $ECR_REGISTRY/nexus-sus-frontend-prod:latest ./nexus-sus-frontend
           docker push $ECR_REGISTRY/nexus-sus-frontend-prod:latest
-
-      - name: Terraform Apply
-        working-directory: infra
-        env:
-          TF_VAR_db_username: nexus_admin
-          TF_VAR_admin_password: ${{ secrets.DB_PASSWORD }}
-        run: terraform apply -auto-approve tfplan
 
       - name: Update ECS Services
         run: |

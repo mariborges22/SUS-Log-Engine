@@ -7,7 +7,7 @@
 resource "aws_security_group" "etl_lambda" {
   name        = "${var.project_name}-etl-lambda-sg-${var.environment}"
   description = "Security Group para a Lambda de ETL"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
 
   # Egress para tudo (baixar pacotes, conectar no S3, etc)
   egress {
@@ -46,6 +46,7 @@ resource "aws_lambda_function" "etl" {
   runtime       = "python3.11"
   timeout       = 300 # 5 min timeout
   memory_size   = 512
+  kms_key_arn   = aws_kms_key.lambda.arn
 
   # Dummy filename inicial (o código real vem do GitHub Actions)
   # O Terraform precisa de um arquivo ZIP inicial válido

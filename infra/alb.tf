@@ -12,24 +12,39 @@ resource "aws_lb" "main" {
 }
 
 # Target Groups
-resource "aws_lb_target_group" "frontend" {
-  name        = "${var.project_name}-front-tg-${var.environment}"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
-
-  health_check {
-    path = "/"
-    port = "traffic-port"
-  }
+# Target Groups
+data "aws_lb_target_group" "frontend" {
+  name = "${var.project_name}-front-tg-${var.environment}"
 }
+
+# resource "aws_lb_target_group" "frontend" {
+#   name        = "${var.project_name}-front-tg-${var.environment}"
+#   port        = 80
+#   protocol    = "HTTP"
+#   vpc_id      = data.aws_vpc.existing_prod.id
+#   target_type = "ip"
+# 
+#   health_check {
+#     healthy_threshold   = 2
+#     unhealthy_threshold = 2
+#     timeout             = 3
+#     interval            = 30
+#     path                = "/"
+#     port                = "80"
+#     protocol            = "HTTP"
+#     matcher             = "200"
+#   }
+# 
+#   lifecycle {
+#     create_before_destroy = true
+#   }
+# }
 
 resource "aws_lb_target_group" "api" {
   name        = "${var.project_name}-api-tg-${var.environment}"
   port        = 8080
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
   target_type = "ip"
 
   health_check {
@@ -51,7 +66,7 @@ resource "aws_lb_listener" "frontend" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = data.aws_lb_target_group.frontend.arn
   }
 }
 
@@ -75,7 +90,7 @@ resource "aws_lb_listener_rule" "api" {
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg-${var.environment}"
   description = "ALB Public Access"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.existing_prod.id
 
   ingress {
     from_port   = 80
