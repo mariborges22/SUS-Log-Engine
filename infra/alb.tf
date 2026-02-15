@@ -29,6 +29,10 @@ resource "aws_lb_target_group" "frontend" {
     protocol            = "HTTP"
     matcher             = "200"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_target_group" "api" {
