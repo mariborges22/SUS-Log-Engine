@@ -105,7 +105,7 @@ resource "aws_ecs_service" "frontend" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = data.aws_lb_target_group.frontend.arn
     container_name   = "nexus-sus-frontend"
     container_port   = 80
   }
