@@ -61,9 +61,8 @@ resource "aws_lambda_function" "etl" {
     variables = {
       DB_HOST         = aws_db_instance.postgres.address
       DB_NAME         = aws_db_instance.postgres.db_name
-      DB_USER         = var.db_username
-      DB_PASSWORD     = var.admin_password
       S3_BUCKET_NAME  = aws_s3_bucket.data_lake.id
+      SECRETS_ARN     = aws_secretsmanager_secret.db_credentials.arn
     }
   }
 

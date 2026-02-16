@@ -58,11 +58,48 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
-# Listeners
+# ==============================================================================
+# LISTENERS
+# HTTP listener: forward (sem HTTPS) ou redirect (com HTTPS)
+# ==============================================================================
+
+# Listener HTTP/80 — Se tiver certificado, redireciona para HTTPS
 resource "aws_lb_listener" "frontend" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
+
+  # Sem HTTPS: forward direto
+  dynamic "default_action" {
+    for_each = var.acm_certificate_arn == "" ? [1] : []
+    content {
+      type             = "forward"
+      target_group_arn = data.aws_lb_target_group.frontend.arn
+    }
+  }
+
+  # Com HTTPS: redirect 80 → 443
+  dynamic "default_action" {
+    for_each = var.acm_certificate_arn != "" ? [1] : []
+    content {
+      type = "redirect"
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+}
+
+# Listener HTTPS/443 — Criado somente se certificado ACM for fornecido
+resource "aws_lb_listener" "https" {
+  count             = var.acm_certificate_arn != "" ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.acm_certificate_arn
 
   default_action {
     type             = "forward"
@@ -70,8 +107,10 @@ resource "aws_lb_listener" "frontend" {
   }
 }
 
+# Listener Rule: /api* → API target group
+# Usa o listener HTTPS se existir, senão o HTTP
 resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.frontend.arn
+  listener_arn = var.acm_certificate_arn != "" ? aws_lb_listener.https[0].arn : aws_lb_listener.frontend.arn
   priority     = 100
 
   action {
@@ -86,15 +125,26 @@ resource "aws_lb_listener_rule" "api" {
   }
 }
 
-# Security Group for ALB
+# ==============================================================================
+# SECURITY GROUP FOR ALB
+# ==============================================================================
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg-${var.environment}"
   description = "ALB Public Access"
   vpc_id      = data.aws_vpc.existing_prod.id
 
   ingress {
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
