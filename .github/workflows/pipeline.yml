@@ -209,7 +209,14 @@ jobs:
             -reconfigure \
             -upgrade
           
-          # Agora que o ambiente está limpo, roda o ciclo completo
+          # Validation Steps
+          echo "🔍 Verificando formatação do Terraform..."
+          terraform fmt -check -recursive || { echo "❌ Arquivos .tf mal formatados. Rode 'terraform fmt' localmente."; exit 1; }
+          
+          echo "✅ Validando configuração do Terraform..."
+          terraform validate
+          
+          # Agora que o ambiente está limpo e validado, roda o ciclo completo
           terraform plan -out=tfplan
           terraform apply tfplan
 

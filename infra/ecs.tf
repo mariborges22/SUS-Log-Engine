@@ -27,11 +27,21 @@ resource "aws_ecs_task_definition" "api" {
       environment = [
         { name = "DB_HOST", value = aws_db_instance.postgres.address },
         { name = "DB_NAME", value = aws_db_instance.postgres.db_name },
-        { name = "DB_USER", value = var.db_username },
-        { name = "DB_PASSWORD", value = var.admin_password },
         { name = "DB_PORT", value = "5432" },
-        { name = "PORT", value = "8080" }
+        { name = "PORT", value = "8080" },
+        { name = "SECRETS_ARN", value = aws_secretsmanager_secret.db_credentials.arn }
       ]
+      secrets = [
+        { name = "DB_USER", valueFrom = "${aws_secretsmanager_secret.db_credentials.arn}:username::" },
+        { name = "DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.db_credentials.arn}:password::" }
+      ]
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -59,6 +69,13 @@ resource "aws_ecs_task_definition" "frontend" {
       image     = "${aws_ecr_repository.repos["nexus-sus-frontend"].repository_url}:latest"
       essential = true
       portMappings = [{ containerPort = 80, hostPort = 80 }]
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {

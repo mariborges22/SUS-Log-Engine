@@ -67,6 +67,12 @@ variable "ecr_repositories" {
   default     = ["nexus-sus-api", "nexus-sus-frontend", "nexus-sus-engine", "nexus-sus-etl"]
 }
 
+variable "acm_certificate_arn" {
+  description = "ARN do certificado ACM para HTTPS. Se vazio, ALB fica somente HTTP."
+  type        = string
+  default     = ""
+}
+
 data "aws_availability_zones" "available" {
   state = "available"
 }

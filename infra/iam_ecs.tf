@@ -85,3 +85,38 @@ resource "aws_iam_role_policy_attachment" "ecs_task_logging" {
   role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.ecs_logging.arn
 }
+
+# 3. Policy para Secrets Manager (Execution Role precisa ler secrets no boot)
+resource "aws_iam_policy" "ecs_secrets_access" {
+  name        = "${var.project_name}-ecs-secrets-policy-${var.environment}"
+  description = "Permite leitura de secrets do Secrets Manager para injeção no container"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          aws_secretsmanager_secret.db_credentials.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = [
+          aws_kms_key.lambda.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_secrets" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_secrets_access.arn
+}
